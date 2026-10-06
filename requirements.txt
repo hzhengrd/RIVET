@@ -1,0 +1,12 @@
+torch==2.8.0+cu128
+transformers==5.6.0
+peft==0.18.1
+numpy==2.3.5
+scipy==1.18.0
+opencv-python==4.13.0.92
+mediapipe==0.10.35
+pillow==11.3.0
+pyyaml==6.0.3
+ultralytics==8.4.83
+qwen-vl-utils==0.0.14
+pytest==9.1.1

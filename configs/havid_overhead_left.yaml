@@ -1,0 +1,31 @@
+# VIEW-2 left-hand HA-ViD (lh_v2) with the REAL Qwen3-VL vision features.
+#
+# Overhead camera on the same recordings as views 0 and 1. Built by
+#   data.havid --view v2        -> cropped videos + manifests + grammar
+#   configs/evidence_havid_overhead_left.yaml        -> evidence
+#
+# Both view-2 hands share the crop box (300,0,1275,620), derived by
+# data.crop_havid --view v2, so a left-vs-right comparison is
+# not confounded by framing -- the same guarantee views 0 and 1 have.
+extends: base.yaml
+
+project:
+  name: havid_overhead_left
+  artifact_root: artifacts/havid_overhead_left
+  output_root: outputs/havid_overhead_left
+
+data:
+  hand: left
+  cropped_root: artifacts/havid_clips/lh_v2_cropped
+  full_root: artifacts/havid_clips/lh_v2_cropped
+
+evidence:
+  reuse_root: artifacts/havid_overhead_left/evidence
+  output_dirname: evidence
+
+features:
+  output_dirname: features_vlm
+  # MUST be explicit: model/train.py:161 hardcodes artifact_path(cfg,
+  # "features") when inferring the dim, so leaving this at 0 would size the
+  # adapter from whatever sits in a "features" dir instead of features_vlm.
+  feature_dim: 1152

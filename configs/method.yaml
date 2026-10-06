@@ -1,0 +1,188 @@
+# Improving the pooled dual-hand model: long-tail augmentation x hand anchoring.
+#
+# Baseline to beat -- the first pooled run, epoch 4, per-hand:
+#     lh 0.5856   rh 0.5285      (specialists: lh 0.6577, rh 0.6326)
+#
+# Two factors, each with its own control, all cells no-SoM:
+#
+#   data     train        4835 rows
+#            train_aug    5826 rows (+991 tail variants, 541 lh / 450 rh)
+#   adapter  spatial      SpatialEvidenceAdapter        (run_spatial)
+#            hand         HandAnchoredAdapter           (run_hand_anchored)
+#
+# The two adapters share this spec exactly -- same parent, data, schedule and
+# adapter block -- because the adapter class is swapped by the runner, not by
+# config. So d_L0_v2 vs d_L0_v3 isolates hand anchoring and nothing else. They
+# need distinct names only so run_dir() keeps their checkpoints apart.
+#
+# Parents are per-split: _resolve_parent resolves init_variant through
+# run_dir(cfg, train_split, variant, seed), so a child trained on train_aug
+# requires a parent trained on train_aug.
+#
+# WHY HAND ANCHORING. The pooled model's single largest error mass is idle
+# right-hand clips called "active" (34.2% vs the specialist's 18.9%), which is
+# what reading the wrong hand's motion looks like. Both hands use the same crop
+# box, and on ~45% of the 1762 shared clip_ids the window and label are identical
+# too, so the prompt clause "Focus only on the <hand> hand" is the only
+# discriminator and it names the hand without locating it. The hand-anchored
+# adapter supplies the location: per-keyframe tracked box -> identity embedding +
+# geometry MLP +
+# an additive proximity bias on the cross-attention logits.
+
+x-dual: &dual
+  stage: sft
+  evidence: true
+  use_badges: true
+  use_som: false
+  necessity: true
+  degrade: true
+  reliability_mix: true
+  arbitration: true
+  freeze_vlm: false
+
+x-child: &child
+  <<: *dual
+  rapt: true
+  residualize: false
+  slot_aux: true
+  utility_gate: true
+  bank_mode: evidence
+  injection_layer: 0
+  injection_site: decoder_early
+  init_variant: rivet_r_sft_no_som_ep2
+
+experiments:
+  # Parent alias: symlinks to the epoch_2 snapshot of the pooled parent, and the
+  # branch point for both Stage-2 cells. epoch_2 rather than the 4-epoch endpoint
+  # because saturation, not the adapter, decided every Stage-2 outcome measured
+  # so far on the right hand:
+  #     ep2 parent (0.5755) -> child epoch1 0.6275   (+0.052, p=0.0062)
+  #     ep4 parent (0.6326) -> child epoch1 0.5789 / 0.5956, and four epochs
+  #                            only got back to 0.6342 / 0.6359 (p=1.0 / 0.89)
+  # A parent at its accuracy peak leaves no residual error for the injector.
+  - name: rivet_r_sft_no_som_ep2
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  # Alias of parent_aug epoch_4 (lh 0.6729 / rh 0.6980). Separate Stage-2 cell
+  # so the ep2 v2/v3 runs are not overwritten.
+  - name: rivet_r_sft_no_som_ep4
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  # ---- parent LoRA (no adapter). Train one per data split. ----
+  - name: rivet_r_sft_no_som
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  # ---- Stage-2 cells ----
+  - name: d_L0_v2
+    <<: *child
+    baseline: rivet_r_sft_no_som
+
+  - name: d_L0_v3
+    <<: *child
+    baseline: d_L0_v2
+
+  - name: d_L0_v2_ep4
+    <<: *child
+    init_variant: rivet_r_sft_no_som_ep4
+    baseline: rivet_r_sft_no_som
+
+  - name: d_L0_v3_ep4
+    <<: *child
+    init_variant: rivet_r_sft_no_som_ep4
+    baseline: d_L0_v2_ep4
+
+  # Alias of parent_aug epoch_6 (view-1: lh 0.6969 / rh 0.6762). Separate from
+  # ep4 so the finished d_L0_v2_ep4 cell is not overwritten.
+  - name: rivet_r_sft_no_som_ep6
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  - name: d_L0_v2_ep6
+    <<: *child
+    init_variant: rivet_r_sft_no_som_ep6
+    baseline: rivet_r_sft_no_som
+
+  # Alias of parent_aug epoch_5 (view-2 peak: lh 0.7260 / rh 0.6946). Separate
+  # from ep4/ep6 so those Stage-2 cells are not overwritten.
+  - name: rivet_r_sft_no_som_ep5
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  - name: d_L0_v2_ep5
+    <<: *child
+    init_variant: rivet_r_sft_no_som_ep5
+    baseline: rivet_r_sft_no_som
+
+  # ---- Assembly101 (single-stream, hand-agnostic) ----
+  # Same spec as the HA-ViD cells; the dataset simply carries no acting hand, so
+  # hand_focus() emits nothing and the model is the single-stream counterpart of
+  # the bimanual one. Kept in this matrix rather than a separate file so that any
+  # future change to the shared no-SoM spec propagates to both datasets.
+  - name: a101_parent
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  # Stage-2 branches from the epoch-4-equivalent parent snapshot, mirroring the
+  # HA-ViD cell that produced the best result (branch point matters: branching
+  # from an under-trained parent gave a materially different outcome).
+  # `runner` is documentation that the launcher enforces, not a field the
+  # trainer reads: the adapter class is chosen by which module is invoked.
+  # These two corpora each carry one degenerate slot -- |V(status)| = 1 on
+  # Assembly101 (no idle class is annotated) and |V(tool)| = 1 on IKEA ASM (no
+  # tools are annotated) -- so the auxiliary slot loss must be restricted to
+  # informative slots, otherwise lambda_slot is silently divided among five
+  # slots when only four carry signal. run_informative applies the rule
+  # |V(s)| > 1 uniformly; on HA-ViD, which has no degenerate slot, it is
+  # identical to run_spatial, so the already-completed HA-ViD cells need
+  # no re-run.
+  - name: a101_L0_v2
+    <<: *child
+    init_variant: a101_parent_ep_final
+    baseline: a101_parent
+    runner: run_informative
+
+  # ---- IKEA ASM (single-stream, hand-agnostic) ----
+  - name: ikea_parent
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  - name: ikea_L0_v2
+    <<: *child
+    init_variant: ikea_parent_ep4
+    baseline: ikea_parent
+    runner: run_informative
+
+  # Assembly101 with the head cap raised to 200 (see configs/assembly101.yaml).
+  - name: a101_cap200_parent
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  - name: a101_cap200_L0_v2
+    <<: *child
+    init_variant: a101_cap200_parent_ep_final
+    baseline: a101_cap200_parent
+    runner: run_informative
+
+  # Cropped Assembly101 (see configs/assembly101_cropped.yaml). Paired with
+  # a101_cap200_parent, which is identical except for the crop.
+  - name: a101c_parent
+    <<: *dual
+    rapt: false
+    baseline: video_only
+
+  - name: a101c_L0_v2
+    <<: *child
+    init_variant: a101c_parent_ep_final
+    baseline: a101c_parent
+    runner: run_informative

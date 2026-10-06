@@ -1,0 +1,28 @@
+# evidence for the VIEW-1 right-hand split (rh_v1), cropped with the
+# shared view-1 box (150,110,1000,670) by data.havid.
+#
+# View 1 is a second camera on the same HA-ViD recordings (session ids end in S1
+# where view 0's end in M0), so the label space, the splits and the clip counts
+# match view 0 exactly: rh_v1 has the same clips as rh_v0 after dropping
+# _extended_, the "w" label and the single-frame S10A05I01S1_rgw_0.
+#
+#   python -m data.evidence --config configs/evidence_havid_frontal_right.yaml \
+#       build --resume --splits train,test
+#
+# data.hand is right and every manifest row carries target_hand "right",
+# which is what hand_track() actually filters on -- this split IS hand-specific,
+# unlike Assembly101/IKEA ASM.
+extends: evidence.yaml
+
+project:
+  name: evidence_havid_frontal_right
+  artifact_root: artifacts/havid_frontal_right
+  output_root: outputs/evidence_rh_v1
+
+data:
+  hand: right
+  cropped_root: artifacts/havid_clips/rh_v1_cropped
+
+evidence:
+  source: video
+  output_dirname: evidence

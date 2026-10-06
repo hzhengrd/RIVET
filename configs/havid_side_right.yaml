@@ -1,0 +1,8 @@
+# Right hand, w already excluded upstream by data.havid_side.
+# Split names stay train/test; only the output root moves so the w-aligned
+# left/right pair lands side by side.
+extends: havid_side_right_vlm.yaml
+
+project:
+  name: havid_side_right
+  output_root: outputs/havid_side_right_now

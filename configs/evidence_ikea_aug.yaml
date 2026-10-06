@@ -1,0 +1,21 @@
+# evidence for the long-tail AUGMENTED clips of IKEA ASM.
+#
+# Reads artifacts/ikea/manifests/train_aug_only.jsonl and writes into the
+# evidence tree the base build already populated, so the 8,318 original clips
+# are not rebuilt. Hand-agnostic (target_hand "both"), no SoM -- matching the
+# base build.
+extends: evidence.yaml
+
+project:
+  name: evidence_ikea_aug
+  artifact_root: artifacts/ikea
+  output_root: outputs/evidence_ikea_aug
+
+data:
+  hand: both
+  cropped_root: artifacts/augmented_clips/tail_ikea
+
+evidence:
+  source: video
+  output_dirname: evidence
+  include_som: false

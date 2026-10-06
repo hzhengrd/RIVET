@@ -1,0 +1,27 @@
+# evidence for the RIGHT-hand HA-ViD split (rh_v0), cropped identically
+# to lh_v0 so left-vs-right differences are not differences of framing.
+#
+# Reads artifacts/havid_side_right/manifests/{train,test}.jsonl (written by
+# data.havid_side) and writes evidence beside them, leaving the
+# left-hand tree at artifacts/evidence untouched.
+#
+#   python -m data.evidence --config configs/evidence_havid_side_right.yaml \
+#       build --resume --splits train,test
+#
+# data.hand is right here; target_hand is "right" in every manifest row, so
+# hand_track() filters for the right hand exactly as the left-hand run does for
+# the left -- this split IS hand-specific, unlike Assembly101/IKEA ASM.
+extends: evidence.yaml
+
+project:
+  name: evidence_havid_side_right
+  artifact_root: artifacts/havid_side_right
+  output_root: outputs/evidence_rh
+
+data:
+  hand: right
+  cropped_root: artifacts/havid_clips/rh_v0_cropped
+
+evidence:
+  source: video
+  output_dirname: evidence

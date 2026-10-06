@@ -1,0 +1,32 @@
+# evidence for the long-tail AUGMENTED clips of the pooled dual-hand split.
+#
+# Reads artifacts/havid/manifests/train_aug_only.jsonl (written by
+# model.augment) and writes into the same
+# artifacts/havid/evidence tree the pooled build already populated, so the
+# original per-hand evidence trees are untouched and the existing 4835 clips are
+# not rebuilt.
+#
+#   python -m data.evidence --config configs/evidence_havid_aug.yaml \
+#       build --resume --splits train_aug_only
+#
+# `data.hand` is a schema placeholder only. The augmented manifest is MIXED --
+# 541 left-hand and 450 right-hand clips -- and build_clip() reads the acting
+# hand from row["target_hand"] per row (data/evidence.py:573,581), so one
+# pass handles both hands correctly.
+#
+# Frames come from row["video"], which points at artifacts/augmented_clips/tail/,
+# so cropped_root is irrelevant here.
+extends: evidence.yaml
+
+project:
+  name: evidence_havid_aug
+  artifact_root: artifacts/havid
+  output_root: outputs/evidence_havid_aug
+
+data:
+  hand: left
+  cropped_root: artifacts/augmented_clips/tail
+
+evidence:
+  source: video
+  output_dirname: evidence

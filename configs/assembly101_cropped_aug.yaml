@@ -1,0 +1,18 @@
+# Cropped Assembly101 with head cap 200 + long-tail augmentation, 3 epochs.
+# Same recipe as configs/assembly101_cropped_aug.yaml; only the artifact root and the
+# cropped clip tree differ, so the pair isolates the crop.
+extends: assembly101_cropped.yaml
+
+project:
+  name: assembly101_cropped_aug
+  output_root: outputs/assembly101_cropped
+
+sft:
+  epochs: 3
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152
+
+rapt:
+  alpha_init: 0.1

@@ -1,0 +1,35 @@
+# Pooled dual-hand, no SoM, long-tail augmented, hand-anchored adapter.
+#
+# Three changes from configs/havid.yaml, each answering a measured failure of
+# the first pooled run (0.5856 lh / 0.5336 rh vs 0.6326 / 0.6560 specialists):
+#
+#   no SoM         the SoM image was already shown not to matter, and dropping
+#                  it removes an image from every prompt.
+#   train_aug      991 temporal-window + spatial-jitter variants of tail-class
+#                  clips (both hands: 541 lh / 450 rh). Pooling alone already
+#                  doubled tail COUNTS and made every bucket worse, so these are
+#                  new pixels -- new keyframes, new evidence, new features -- not
+#                  a reweighted sampler.
+#   alpha_init 0.1 the injector is a no-op at alpha=0 and stays there; measured
+#                  alpha after 12384 steps was -0.00077. Same reasoning as
+#                  the no-mark config.
+#
+# The hand-anchored adapter (model/hand_anchored.py) needs hand_boxes/, written by
+# model.hand_boxes; runs launched through run_spatial or
+# the stock entry points ignore that directory entirely.
+extends: havid.yaml
+
+project:
+  name: havid_aug
+  output_root: outputs/havid
+
+sft:
+  epochs: 4
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152
+  hand_boxes_dirname: hand_boxes
+
+rapt:
+  alpha_init: 0.1

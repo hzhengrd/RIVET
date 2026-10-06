@@ -1,0 +1,34 @@
+# Assembly101, head-capped subsample + long-tail augmentation, no SoM.
+#
+# The recipe validated on HA-ViD (configs/havid_aug.yaml) applied to a
+# single-stream dataset. Two deviations are forced by the data and are reported
+# as such:
+#   (i)  Assembly101 annotates no acting hand -- every row is target_hand "both",
+#        so the prompt carries no hand-conditioning clause. This is the
+#        single-stream counterpart of the bimanual model, not the same model.
+#   (ii) The converted taxonomy has a degenerate status slot (vocabulary
+#        {active} only), so five-slot exact match is effectively four-slot and
+#        must not be pooled with HA-ViD numbers.
+#
+# Scale. The full training split holds 46,900 rows; four epochs of the HA-ViD
+# recipe would need ~17 days on one device. A stratified head cap of 20
+# (model.subsample) keeps all 1,243 classes and every instance of the 888
+# classes at or below the cap, giving 13,072 rows, to which augmentation adds
+# 8,263 -> 21,335. At 2.494 optimiser steps per row this is ~53,200 steps per
+# epoch, so ONE epoch here already exceeds the 58,108 steps of the full
+# four-epoch HA-ViD schedule; three epochs are therefore scheduled, not four.
+extends: assembly101.yaml
+
+project:
+  name: assembly101_aug
+  output_root: outputs/assembly101
+
+sft:
+  epochs: 3
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152
+
+rapt:
+  alpha_init: 0.1

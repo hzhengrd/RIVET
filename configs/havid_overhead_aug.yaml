@@ -1,0 +1,35 @@
+# VIEW-2 pooled dual-hand, no SoM, long-tail augmented.
+#
+# Byte-for-byte the same recipe as configs/havid_aug.yaml (view 0) and
+# configs/havid_frontal_aug.yaml (view 1), pointed at the view-2 artifacts. Holding
+# every knob identical is the point: the three views are three cameras on the
+# same recordings, so a difference in the result is a difference of viewpoint and
+# not of configuration.
+#
+#   view 0  parent_aug  ep4: lh 0.6729 rh 0.6980
+#   view 1  parent_aug  ep4: see outputs/havid_frontal
+#   view 2  this run
+#
+#   data      artifacts/havid_overhead  (4835 pooled train rows + tail variants)
+#   evidence  artifacts/havid_overhead/evidence
+#   features  artifacts/havid_overhead/features_vlm   D=1152
+extends: base_vlm.yaml
+
+project:
+  name: havid_overhead_aug
+  artifact_root: artifacts/havid_overhead
+  output_root: outputs/havid_overhead
+
+evidence:
+  reuse_root: artifacts/havid_overhead/evidence
+
+sft:
+  epochs: 6
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152
+  hand_boxes_dirname: hand_boxes
+
+rapt:
+  alpha_init: 0.1

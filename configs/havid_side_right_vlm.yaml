@@ -1,0 +1,36 @@
+# RIGHT-hand HA-ViD (rh_v0) with the REAL Qwen3-VL vision features.
+#
+# Mirrors configs/base_vlm.yaml but points at the right-hand artifacts built
+# by data.havid_side + configs/evidence_havid_side_right.yaml:
+#   manifests  artifacts/havid_side_right/manifests/{train,test}.jsonl (+ train_grammar.json)
+#   evidence   artifacts/havid_side_right/evidence
+#   features   artifacts/havid_side_right/features_vlm   (D=1152, not the 96-d histograms)
+#   outputs    outputs/havid_side_right
+#
+# The right-hand videos are cropped with the SAME box as lh_v0 (450,100,1100,700),
+# so a left-vs-right comparison is not confounded by framing.
+#
+# `w` (wrong operation) clips are dropped upstream, matching the left-hand data.
+extends: base.yaml
+
+project:
+  name: havid_side_right_vlm
+  artifact_root: artifacts/havid_side_right
+  output_root: outputs/havid_side_right
+
+data:
+  hand: right
+  cropped_root: artifacts/havid_clips/rh_v0_cropped
+  full_root: artifacts/havid_clips/rh_v0_cropped
+
+evidence:
+  # evidence lives under this artifact root, not the shared v3 left-hand tree
+  reuse_root: artifacts/havid_side_right/evidence
+  output_dirname: evidence
+
+features:
+  output_dirname: features_vlm
+  # MUST be explicit: model/train.py:161 hardcodes artifact_path(cfg,
+  # "features") when inferring the dim, so leaving this at 0 would size the
+  # adapter from whatever sits in a "features" dir instead of features_vlm.
+  feature_dim: 1152

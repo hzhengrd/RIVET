@@ -1,0 +1,28 @@
+# IKEA ASM (dev3 top view, workspace-cropped) with real Qwen3-VL vision features.
+#
+# Manifests come from data.ikea;
+# evidence from configs/evidence_ikea.yaml (no SoM).
+#
+# Single-stream, hand-agnostic: IKEA ASM annotates no acting hand, so every row
+# carries target_hand "both" and the prompt receives no hand-conditioning
+# clause -- the g = \bot instance of the granularity operator.
+extends: base.yaml
+
+project:
+  name: ikea
+  artifact_root: artifacts/ikea
+  output_root: outputs/ikea
+
+data:
+  hand: both
+  cropped_root: data/ikea_asm/clips
+  full_root: data/ikea_asm/clips
+
+evidence:
+  reuse_root: artifacts/ikea/evidence
+  output_dirname: evidence
+  include_som: false
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152

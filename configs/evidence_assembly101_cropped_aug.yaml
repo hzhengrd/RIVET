@@ -1,0 +1,17 @@
+# evidence for the workspace-cropped Assembly101 clips (augmented).
+# Hand-agnostic (target_hand "both"), no SoM -- matching the uncropped build.
+extends: evidence.yaml
+
+project:
+  name: evidence_assembly101_cropped_aug
+  artifact_root: artifacts/assembly101_cropped
+  output_root: outputs/evidence_assembly101_cropped
+
+data:
+  hand: both
+  cropped_root: artifacts/augmented_clips/tail_a101c
+
+evidence:
+  source: video
+  output_dirname: evidence
+  include_som: false

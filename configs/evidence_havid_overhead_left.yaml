@@ -1,0 +1,23 @@
+# evidence for the VIEW-2 left-hand split (lh_v2), cropped with the
+# shared view-2 box (300,0,1275,620) by data.havid --view v2.
+#
+# View 2 is a third camera on the same HA-ViD recordings -- an overhead view of
+# the bench, session ids ending in S2 -- so the label space and splits match
+# views 0 and 1 exactly.
+#
+#   python -m data.evidence --config configs/evidence_havid_overhead_left.yaml \
+#       build --resume --splits train,test
+extends: evidence.yaml
+
+project:
+  name: evidence_havid_overhead_left
+  artifact_root: artifacts/havid_overhead_left
+  output_root: outputs/evidence_lh_v2
+
+data:
+  hand: left
+  cropped_root: artifacts/havid_clips/lh_v2_cropped
+
+evidence:
+  source: video
+  output_dirname: evidence

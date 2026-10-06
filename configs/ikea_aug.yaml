@@ -1,0 +1,31 @@
+# IKEA ASM, long-tail augmented, no SoM -- the HA-ViD recipe on a single-stream
+# corpus.
+#
+# Scale needs no head cap here: 5,729 training rows is the same order as the
+# HA-ViD pooled split (5,826), so the four-epoch schedule transfers directly at
+# ~12.7 h per epoch. Only the tail is rebalanced: 16 of 33 classes hold fewer
+# than 60 instances (the rarest, lay_down_table_top, holds one), which the
+# augmentation lifts with 388 new clips.
+#
+# Degenerate slot. IKEA ASM annotates no tools, so |V(tool)| = 1 and the slot
+# carries no information. The output schema is deliberately left unchanged --
+# dropping the slot would make the schema dataset-specific and the exact-match
+# metric incomparable with HA-ViD, for a gain bounded by the rate at which a
+# model mispredicts a constant field. Instead the auxiliary slot loss is
+# restricted to informative slots by run_informative, which touches no
+# prompt, no grammar and no metric.
+extends: ikea.yaml
+
+project:
+  name: ikea_aug
+  output_root: outputs/ikea
+
+sft:
+  epochs: 4
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152
+
+rapt:
+  alpha_init: 0.1

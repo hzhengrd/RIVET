@@ -1,0 +1,132 @@
+project:
+  name: base
+  output_root: outputs/havid_side_left
+  artifact_root: artifacts/havid_side_left
+  seeds: [17]
+  # Optional: reuse completed parent LoRAs for rivet_sft / rivet_r_sft / rivet_r_grpo
+  parent_root: outputs/parents
+  evidence_parent_root: outputs/evidence
+
+data:
+  hand: left
+  cropped_root: artifacts/havid_clips/lh_v0
+  full_root: artifacts/havid_clips/lh_v0_original
+  right_root: artifacts/havid_clips/rh_v0
+  ground_truth: artifacts/havid/ground_truth.jsonl
+  mapping: artifacts/havid_clips/mapping_semantics.txt
+  composition_split: artifacts/splits/composition_split_v1.json
+  primitive_split: artifacts/splits/primitive_split_v1.json
+  train_dir: videos_train
+  test_dir: videos_val
+  manifest_root: artifacts/evidence/manifests
+  corrupt_clip_ids: [S10A05I01M0_rgw_0]
+
+evidence:
+  reuse_root: artifacts/evidence
+  output_dirname: evidence
+  source: video
+  num_keyframes: 10
+  include_som: true
+  include_degraded_video: true
+
+features:
+  spatial_h: 4
+  spatial_w: 4
+  include_som: false
+  feature_dim: 0          # 0 => infer from first .npy
+  fallback_dim: 96
+
+reliability:
+  enabled: true
+  schedule:
+    correct: 0.45
+    shuffled: 0.10
+    partial: 0.15
+    mark_jitter: 0.05
+    badge_perm: 0.05
+    wrong: 0.10
+    absent: 0.10
+  arbitration_fraction: 0.30
+  grpo_corrupt_fraction: 0.35
+  do_no_harm_weight: 1.5
+
+rapt:
+  token_count: 6
+  token_dim: 512
+  phase_heads: 8
+  residualize: false      # overridden per variant
+  utility_gate: true
+  slot_aux: true
+  quantizer: continuous
+  fsq_levels: [8, 8, 8, 6, 5]
+  vq_codebook_size: 256
+  vq_latent_dim: 64
+  vq_commitment: 0.25
+  token_dropout: 0.10
+  injection_layer: 16
+  bank_mode: evidence
+
+vlm:
+  model: Qwen3/Qwen3-VL-8B-Instruct
+  local_dir: Qwen3/Qwen3-VL-8B-Instruct
+  video_source: video
+  dtype: bfloat16
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  max_images: 11
+  video_max_pixels: 262144
+  video_max_frames: 32
+  video_fps: 4.0
+  max_new_tokens: 128
+
+sft:
+  epochs: 2
+  learning_rate: 8.0e-5
+  adapter_lr: 8.0e-5
+  lora_lr: 2.0e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  grad_accum: 8
+  max_grad_norm: 1.0
+  log_every: 10
+  save_every: 500
+  necessity_fraction: 0.35
+  degrade_fraction: 0.15
+
+training:
+  lambda_slot: 0.50
+  lambda_gate: 0.25
+  lambda_residual: 0.10
+
+grpo:
+  epochs: 1
+  learning_rate: 1.0e-5
+  weight_decay: 0.0
+  group_size: 6
+  grad_accum_groups: 2
+  temperature: 1.0
+  top_p: 0.95
+  kl_beta: 0.05
+  max_grad_norm: 1.0
+  log_every: 10
+  save_every: 100
+  reward:
+    w_format: 0.5
+    w_slot: 2.0
+    w_valid: 0.5
+    w_composite: 2.0
+    w_cost: 0.0
+    macro_weighted: true
+    validity_reward: true
+    macro_alpha: 0.5
+    max_class_weight: 10.0
+
+evaluation:
+  decoding: hard_id
+  primary_metric: exact_accuracy
+  bootstrap_samples: 10000
+  permutation_samples: 10000
+  confidence: 0.95
+  holm_alpha: 0.05
+  harm_levels: [correct, shuffled, partial, wrong, absent]

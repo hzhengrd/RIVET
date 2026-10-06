@@ -1,0 +1,26 @@
+# Assembly101 (fixed view v4 / C10119_rgb) with real Qwen3-VL vision features.
+#
+# Manifests come from model.external_adapter
+# (artifacts/assembly101/manifests/{train,validation,test}.jsonl).
+# evidence is built by configs/evidence_assembly101.yaml (no SoM).
+#
+#   python -m model.features_vlm --config configs/assembly101.yaml \
+#       --splits train,validation,test --device cuda --skip_missing --poll_seconds 120
+extends: base.yaml
+
+project:
+  name: assembly101
+  artifact_root: artifacts/assembly101
+  output_root: outputs/assembly101
+
+data:
+  hand: both
+
+evidence:
+  reuse_root: artifacts/assembly101/evidence
+  output_dirname: evidence
+  include_som: false
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152

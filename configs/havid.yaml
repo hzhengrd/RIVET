@@ -1,0 +1,24 @@
+# One model on BOTH hands: pooled lh+rh training, per-hand evaluation.
+#
+# Data comes from model.pool, which prefixes clip_ids with
+# lh_/rh_ because 1762 train ids (and 414 test ids) are shared between the hands
+# and name genuinely different clips. Evidence and features are symlink trees
+# pointing back at the per-hand originals -- nothing is copied or modified.
+#
+# `data.hand` is left at "left" only because the schema requires a value; the
+# per-row target_hand field is what the prompt actually uses
+# (hand_focus -> "Focus only on the left/right hand."), so a single model is
+# conditioned on the hand it must answer for.
+extends: base_vlm.yaml
+
+project:
+  name: havid
+  artifact_root: artifacts/havid
+  output_root: outputs/havid
+
+evidence:
+  reuse_root: artifacts/havid/evidence
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152

@@ -1,0 +1,31 @@
+# evidence for Assembly101 (fixed view v4 / C10119_rgb), hand-agnostic.
+#
+# Reads the adapted manifests from model.external_adapter
+# (artifacts/assembly101/manifests/{train,validation,test}.jsonl) and writes
+# evidence beside them, leaving the HA-ViD tree at artifacts/evidence alone.
+#
+#   python -m data.evidence --config configs/evidence_assembly101.yaml \
+#       build --resume --splits train,validation,test
+#
+# NO workspace crop, unlike IKEA ASM. Assembly101's v4 camera already frames the
+# workbench: hands and toy parts are legible and MediaPipe finds hands in 8/8
+# sampled clips (175 detections) on the raw frames, versus 0/48 frames on IKEA
+# ASM's room-wide dev3 view before cropping.
+#
+# target_hand is "both" in every row, so hand_track() is bypassed for
+# hands_per_frame(): proposal ranking considers either hand and the
+# mark_nearest_hand QA is not emitted.
+extends: evidence.yaml
+
+project:
+  name: evidence_assembly101
+  artifact_root: artifacts/assembly101
+  output_root: outputs/evidence_a101
+
+evidence:
+  source: video
+  output_dirname: evidence
+  # SoM dropped: r_sft_e_no_som matches the parent on HA-ViD (0.6358 vs 0.6341),
+  # and skipping FastSAM removes the dominant per-clip CPU cost -- which matters
+  # at 84,284 clips.
+  include_som: false

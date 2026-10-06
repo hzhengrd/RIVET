@@ -1,0 +1,26 @@
+# evidence for the long-tail AUGMENTED clips of the Assembly101 subsample.
+#
+# Same role as configs/evidence_havid_aug.yaml on HA-ViD: reads
+# artifacts/assembly101/manifests/train_aug_only.jsonl and writes into the
+# evidence tree the base build already populated, so the 84,284 original clips
+# are not rebuilt.
+#
+# Assembly101 annotates no acting hand: every row carries target_hand "both", so
+# build_clip() takes the hand-agnostic path (hands_per_frame) and emits no
+# mark_nearest_hand question. include_som stays false, matching the base build
+# and the finding that region marks do not help in this domain.
+extends: evidence.yaml
+
+project:
+  name: evidence_assembly101_aug
+  artifact_root: artifacts/assembly101
+  output_root: outputs/evidence_assembly101
+
+data:
+  hand: both
+  cropped_root: artifacts/augmented_clips/tail_a101
+
+evidence:
+  source: video
+  output_dirname: evidence
+  include_som: false

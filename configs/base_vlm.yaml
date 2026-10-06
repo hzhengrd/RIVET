@@ -1,0 +1,25 @@
+# Same as configs/base.yaml but reading the REAL Qwen3-VL vision features
+# (artifacts/havid_side_left/features_vlm, D=1152) instead of the silently-degraded
+# colour-histogram bank (artifacts/havid_side_left/features, D=96).
+#
+# See model/features_vlm.py for why the original bank is
+# histograms: model/features.py drops `image_grid_thw`, the Qwen3-VL tower
+# raises, and a bare `except Exception` falls back to _histogram_tile().
+#
+# Outputs go to outputs/havid_side_left_vlm/ so every existing model, prediction and
+# metric under outputs/havid_side_left/ is left untouched and the two banks can be
+# compared side by side at the same variant names and seed.
+extends: base.yaml
+
+project:
+  output_root: outputs/havid_side_left_vlm
+
+features:
+  output_dirname: features_vlm
+  # MUST be set explicitly, not left at 0 ("infer"): the inference path in
+  # model/train.py:161 hardcodes `artifact_path(cfg, "features")`
+  # instead of honouring output_dirname, so it would read the 96-d histogram
+  # bank and build the adapter with normalized_shape=[96] while load_feature()
+  # correctly serves 1152-d tensors ->
+  #   RuntimeError: Given normalized_shape=[96] ... but got input of size [1, 160, 1152]
+  feature_dim: 1152

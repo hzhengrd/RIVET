@@ -1,0 +1,36 @@
+# Assembly101, workspace-cropped variant (view v4, crop (440,10,1880,1050)).
+#
+# The clips were originally kept at the full 1920x1080 frame because the fixed
+# view already fills most of the frame with the bench: reliable hand
+# localisation was 96% uncropped, against 0% for IKEA ASM's room-wide view
+# before cropping. Measured on 260 sampled clips, hand boxes occupy 0.825% of
+# the uncropped frame -- already comparable to HA-ViD *after* its crop
+# (0.74-0.87%) -- so the resolution argument for cropping is weak here.
+#
+# The crop is nonetheless evaluated as an explicit variable, on the most
+# conservative of the three candidates: 1440x1040, 72% of the frame, retaining
+# 99.72% of hand boxes and 84.4% of accumulated motion, discarding mainly the
+# left-hand rig and cabling and the dark floor at the frame edges.
+#
+# A separate artifact root keeps the uncropped build intact as the control:
+# evidence and features are keyed by clip_id, which the crop does not change.
+extends: base.yaml
+
+project:
+  name: assembly101_cropped
+  artifact_root: artifacts/assembly101_cropped
+  output_root: outputs/assembly101_cropped
+
+data:
+  hand: both
+  cropped_root: artifacts/assembly101_videos/clips_c
+  full_root: artifacts/assembly101_videos/clips_c
+
+evidence:
+  reuse_root: artifacts/assembly101_cropped/evidence
+  output_dirname: evidence
+  include_som: false
+
+features:
+  output_dirname: features_vlm
+  feature_dim: 1152

@@ -1,0 +1,29 @@
+# evidence for IKEA ASM (dev3 top view), hand-agnostic.
+#
+# Reads the adapted manifests written by
+# model.external_adapter (artifacts/ikea/manifests/
+# {train,test}.jsonl) and writes evidence beside them, so training can point
+# `evidence.reuse_root` at it without touching the HA-ViD evidence tree.
+#
+#   python -m data.evidence --config configs/evidence_ikea.yaml \
+#       build --resume --splits train,test
+#
+# Runs on CPU: som_device is already cpu upstream, and MediaPipe/motion are CPU.
+# target_hand is "both" in these manifests, so hand_track() is bypassed in
+# favour of hands_per_frame() -- proposals rank by proximity to EITHER hand and
+# the mark_nearest_hand QA is not emitted (there is no target hand to ask about).
+extends: evidence.yaml
+
+project:
+  name: evidence_ikea
+  artifact_root: artifacts/ikea
+  output_root: outputs/evidence_ikea
+
+evidence:
+  source: video
+  output_dirname: evidence
+  # SoM is dropped: r_sft_e_no_som scores the same as the parent on HA-ViD
+  # (0.6358 vs 0.6341), so the marks buy nothing. Skipping them also removes the
+  # FastSAM proposal pass, which is the bulk of the CPU cost per clip, and the
+  # mark_nearest_hand QA is already not emitted for hand-agnostic clips.
+  include_som: false

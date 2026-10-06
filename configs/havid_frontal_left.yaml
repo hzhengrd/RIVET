@@ -1,0 +1,39 @@
+# VIEW-1 left-hand HA-ViD (lh_v1) with the REAL Qwen3-VL vision features.
+#
+# View 1 is a second camera on the same recordings: same clips, same labels,
+# same splits, session ids ending in S1 instead of M0. Built by
+#   data.havid                 -> cropped videos + manifests + grammar
+#   configs/evidence_havid_frontal_left.yaml       -> evidence
+#
+#   manifests  artifacts/havid_frontal_left/manifests/{train,test}.jsonl (+ train_grammar.json)
+#   evidence   artifacts/havid_frontal_left/evidence
+#   features   artifacts/havid_frontal_left/features_vlm   (D=1152, not the 96-d histograms)
+#   outputs    outputs/havid_frontal_left
+#
+# Both view-1 hands are cropped with the SAME box (150,110,1000,670), derived by
+# data.crop_havid, so a left-vs-right comparison is not
+# confounded by framing -- the same guarantee view 0 has.
+#
+# `w` (wrong operation) clips are dropped upstream, matching view 0.
+extends: base.yaml
+
+project:
+  name: havid_frontal_left
+  artifact_root: artifacts/havid_frontal_left
+  output_root: outputs/havid_frontal_left
+
+data:
+  hand: left
+  cropped_root: artifacts/havid_clips/lh_v1_cropped
+  full_root: artifacts/havid_clips/lh_v1_cropped
+
+evidence:
+  reuse_root: artifacts/havid_frontal_left/evidence
+  output_dirname: evidence
+
+features:
+  output_dirname: features_vlm
+  # MUST be explicit: model/train.py:161 hardcodes artifact_path(cfg,
+  # "features") when inferring the dim, so leaving this at 0 would size the
+  # adapter from whatever sits in a "features" dir instead of features_vlm.
+  feature_dim: 1152

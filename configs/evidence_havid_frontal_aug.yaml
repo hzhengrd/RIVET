@@ -1,0 +1,28 @@
+# evidence for the long-tail AUGMENTED clips of the VIEW-1 pooled split.
+#
+# Same role as configs/evidence_havid_aug.yaml but for view 1: reads
+# artifacts/havid_frontal/manifests/train_aug_only.jsonl and writes into the
+# same artifacts/havid_frontal/evidence tree the pooled build populated, so the
+# 6015 original clips are not rebuilt.
+#
+#   python -m data.evidence --config configs/evidence_havid_frontal_aug.yaml \
+#       build --resume --splits train_aug_only
+#
+# `data.hand` is a schema placeholder: the augmented manifest is MIXED (541 lh /
+# 450 rh) and build_clip() reads the acting hand from row["target_hand"] per row,
+# so one pass handles both hands. Frames come from row["video"], which points at
+# artifacts/augmented_clips/tail_v1/.
+extends: evidence.yaml
+
+project:
+  name: evidence_havid_frontal_aug
+  artifact_root: artifacts/havid_frontal
+  output_root: outputs/evidence_havid_frontal
+
+data:
+  hand: left
+  cropped_root: artifacts/augmented_clips/tail_v1
+
+evidence:
+  source: video
+  output_dirname: evidence
