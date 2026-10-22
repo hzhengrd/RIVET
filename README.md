@@ -1,6 +1,6 @@
 # RIVET: Rendered In-Video Evidence and Token-reconditioned Decoding
 
-Reference implementation of RIVET, a vision-language model for fine-grained
+Reference implementation of RIVET, a method to enhance vision-language models for fine-grained
 assembly action understanding. One VLM answers an assembly observation at a
 requested granularity — the whole action, the left hand, or the right hand — and
 emits a composition of five slots rather than a single closed-set label.
