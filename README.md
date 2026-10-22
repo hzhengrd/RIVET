@@ -1,6 +1,6 @@
 # RIVET: Rendered In-Video Evidence and Token-reconditioned Decoding
 
-Reference implementation of RIVET, a vision-language model for fine-grained
+Reference implementation of RIVET, a method to enhance vision-language models for fine-grained
 assembly action understanding. One VLM answers an assembly observation at a
 requested granularity — the whole action, the left hand, or the right hand — and
 emits a composition of five slots rather than a single closed-set label.
@@ -13,8 +13,7 @@ A prediction is correct only when all five slots match exactly:
 status, verb, manipulated_object, target_object, tool
 ```
 
-The same code serves HA-ViD (an acting hand is annotated) and Assembly101 and
-IKEA ASM (it is not). The backbone is
+The backbone is
 [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) with
 LoRA.
 
@@ -57,29 +56,6 @@ tests/       offline tests (no GPU, no VLM)
 Generated clips, evidence and checkpoints go under `artifacts/` and `outputs/`.
 They are not part of this repository.
 
-`model/hand_anchored.py` is an ablation that was measured and not selected.
-The reported method does not call it.
-
-## Reported configuration
-
-`configs/method.yaml` fixes the recipe used on every corpus:
-
-- temporal badges, necessity questions, reliability mixing, a degraded-video arm
-  and an arbitration gate are on
-- Stage 2 injects evidence features at decoder layer 0
-- seed 17; the primary metric is 5-slot exact match under `hard_id` decoding
-
-| Corpus | View | Train split | Stage 1 | Stage 2 |
-|---|---|---|---|---|
-| HA-ViD | side, frontal, overhead | `train_aug`, both hands pooled | `rivet_r_sft_no_som` | `model.run_spatial`, variant `d_L0_v2` |
-| IKEA ASM | top, workspace-cropped | `train_aug` | `ikea_parent` | `model.run_informative`, variant `ikea_L0_v2` |
-| Assembly101 | fixed view, workspace-cropped, head cap 200 | `train_aug200` | `a101c_parent` | `model.run_informative`, variant `a101c_L0_v2` |
-
-IKEA ASM annotates no tools and Assembly101 annotates no idle state, so one
-slot is constant on each. `model.run_informative` drops that slot from the
-auxiliary loss only. The output schema, the prompt and the exact-match metric
-stay the same as on HA-ViD, where the two launchers compute the same loss.
-
 ## Results
 
 Exact-match accuracy (%), RGB input alone.
@@ -118,7 +94,7 @@ python -m data.evidence --config configs/evidence_<corpus>.yaml \
 python -m model.features_vlm --config configs/<corpus>.yaml \
     --splits train,test --device cuda --output_dirname features_vlm
 
-# 4. HA-ViD only: pool the two hands, then long-tail augmentation.
+# 4. HA-ViD only: pool the two hands
 python -m model.pool --out_root artifacts/havid
 python -m model.augment \
     --manifest artifacts/havid/manifests/train.jsonl \
@@ -149,15 +125,9 @@ python -m model.infer \
 run these steps for one corpus. `scripts/stage2.py` prints the launcher a
 variant declares in the matrix.
 
-## Weights
-
-Released checkpoints are LoRA adapters on `Qwen/Qwen3-VL-8B-Instruct`. Download
-the base model separately. The adapter directory is what `--model_dir` points
-at during inference.
-
 ## Requirements
 
-See `requirements.txt`. Evidence construction runs on CPU (OpenCV, MediaPipe).
+See `requirements.txt`. Evidence construction runs on CPU.
 Feature extraction and training need a CUDA GPU and the Qwen3-VL weights.
 
 ```bash
