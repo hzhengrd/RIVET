@@ -1,26 +1,8 @@
 """Stratified head-capped subsample of a training manifest.
 
-WHY A SUBSAMPLE IS NEEDED FOR Assembly101
------------------------------------------
-The recipe validated on HA-ViD trains for four epochs over 5,826 pooled rows,
-which is 14,527 optimiser steps per epoch at ~3.2 s/step. Assembly101's training
-split holds 46,900 rows; the same recipe would need 104 h per epoch and about 17
-days for four epochs on one device, before Stage 2. Capping the head brings this
-into range without discarding a single class.
-
-WHAT IS AND IS NOT DISCARDED
-----------------------------
-Only instances of classes that already have more than `--cap` examples are
-dropped, and every class present in the full split survives in the subsample.
-The long tail -- the part of the distribution the augmentation of
-model.augment targets and the part the evaluation is most sensitive to
--- is therefore untouched: with cap 20, all 970 classes holding fewer than 30
-instances keep every example they had.
-
-Selection within an over-represented class is deterministic given `--seed`, so
-the subsample is reproducible, and is spread over distinct source sessions
-before falling back to arbitrary order, so a capped class does not collapse onto
-a handful of recording sessions.
+Drops instances only from classes exceeding `--cap`; every class survives, and
+classes below the cap keep every example. Selection is deterministic given
+`--seed` and spread over distinct source sessions.
 
     python -m model.subsample \
         --manifest artifacts/assembly101/manifests/train.jsonl \

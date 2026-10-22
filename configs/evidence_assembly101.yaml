@@ -13,8 +13,7 @@
 # ASM's room-wide dev3 view before cropping.
 #
 # target_hand is "both" in every row, so hand_track() is bypassed for
-# hands_per_frame(): proposal ranking considers either hand and the
-# mark_nearest_hand QA is not emitted.
+# hands_per_frame().
 extends: evidence.yaml
 
 project:
@@ -25,7 +24,3 @@ project:
 evidence:
   source: video
   output_dirname: evidence
-  # SoM dropped: r_sft_e_no_som matches the parent on HA-ViD (0.6358 vs 0.6341),
-  # and skipping FastSAM removes the dominant per-clip CPU cost -- which matters
-  # at 84,284 clips.
-  include_som: false

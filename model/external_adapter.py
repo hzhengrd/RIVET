@@ -1,25 +1,8 @@
 """Adapt Assembly101 and IKEA ASM manifests to the training layout.
 
-data.assembly101 and data.ikea emit a slightly different row than the trainer
-reads, so this converts rather than duplicating the cutting work:
-
-  prepared row                      training row
-  ----------------------------------------------------------------
-  clip_id, label, video,            same
-  target_hand, gold_slots           same
-  holistic                       -> description
-  (n/a)                          -> full_video    (= video; these datasets have
-                                    no separate full-frame source, unlike
-                                    HA-ViD's lh_v0 vs lh_v0_original)
-  session_id / scan_id           -> session_id
-  is_head, start_sec, ...           carried through for analysis
-
-Grammar: model.grammar.apply_grammar() needs `slot_vocab` (INCLUDING
-`status`, which the prepared grammar omits) plus `tuples` and `class_counts`,
-which the prepared grammar does not emit at all. `tuples` is the valid
-composition set and is derived HERE FROM THE TRAIN SPLIT ONLY -- taking it from
-the full taxonomy would hand the model compositions its training split never
-contained.
+Converts the prepared rows (`holistic` -> `description`, `session_id`/`scan_id`
+-> `session_id`) and rebuilds the grammar's `slot_vocab`, `tuples` and
+`class_counts`; `tuples` is derived from the train split only.
 
     python -m model.external_adapter --dataset assembly101_v4 \
         --artifact_root artifacts/assembly101

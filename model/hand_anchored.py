@@ -1,44 +1,8 @@
 """Hand-anchored evidence adapter for the pooled dual-hand model.
 
-THE PROBLEM IT TARGETS
-----------------------
-One model, both hands. The only thing that distinguishes the two cases is the
-prompt sentence "Focus only on the left/right hand." -- the crop box is the same
-constant (450,100,1100,700) on both sides, and on ~45% of the 1762 clip_ids the
-two hands share, the annotated window and the label are identical too. So for a
-large slice of training the hand clause is uninformative, and the model has every
-reason to ignore it. It does: pooled scores 0.5285/0.5336 against per-hand
-specialists at 0.6326/0.6560, and over half that deficit is idle right-hand
-clips called "active" (34.2% vs 18.9%) -- exactly the error you get from reading
-the wrong hand's motion.
-
-Adding the hand as one more embedding would not fix this, because the text
-already carries hand *identity*. What is missing is hand *location*: nothing in
-the (T,4,4,1152) evidence grid says which cells the asked-about hand occupies.
-
-WHAT THIS ADDS (three terms, all ablatable)
--------------------------------------------
-1. identity   a learned left/right embedding on the grid cells. Cheap, and it
-              lets the two hands specialise their read-out of the same features.
-2. geometry   the tracked hand box per keyframe (x0,y0,x1,y1,valid) through a
-              small MLP, added to that keyframe's cells -- so the adapter knows
-              where the hand is *at each point in time*, which a single sentence
-              cannot express.
-3. proximity  an additive bias on the cross-attention logits, -scale * d^2, with
-              d the distance from each grid cell centre to the hand box centre.
-              This is the term that actually steers read-out to the acting hand.
-              `scale` is learned and starts small, so at init the model is v2 to
-              within the two embeddings; it can only sharpen if that helps.
-
-Keyframes with no detected hand contribute zero bias and a `valid=0` geometry
-vector, so the adapter degrades to v2 exactly where tracking fails (measured
-coverage: mean 0.978, 85% of clips fully tracked).
-
-Boxes come from model/hand_boxes.py, computed on the same keyframe JPEGs the
-feature grid is built from, so cell <-> box alignment needs no assumptions.
-
-NOT SoM: nothing is drawn, nothing enters the prompt, the VLM never sees a mark.
-The geometry is consumed numerically here, inside the adapter.
+Adds a learned hand-identity embedding, per-keyframe hand-box geometry, and a
+proximity bias on the cross-attention logits to steer read-out to the acting
+hand. Keyframes without a detected hand contribute zero bias.
 """
 from __future__ import annotations
 

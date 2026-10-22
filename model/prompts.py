@@ -10,6 +10,7 @@ import numpy as np
 from .config import artifact_path, evidence_root, repo_path
 from .corruption import (
     DEFAULT_SCHEDULE,
+    CorruptionDraw,
     apply_path_corruption,
     arbitration_label,
     draw_corruption,
@@ -18,10 +19,8 @@ from .utils import structured_answer, subset_indices
 
 
 def hand_focus(target: str) -> str:
-    """Hand-focus clause, trailing space when non-empty. Mirrors
-    data.common.hand_focus: datasets with no acting-hand annotation
-    ("both") get no hand clause -- the question is about the action, not a hand."""
     return "" if target == "both" else f"Focus only on the {target} hand. "
+
 
 MAIN_PROMPT = (
     "{hand_focus}The video shows the full clip. "
@@ -36,10 +35,6 @@ BADGE_SENTENCE = (
     "'k/N' (top-left) and a yellow progress bar (bottom) showing its time position in the clip. "
 )
 PLAIN_KF_SENTENCE = "The additional images are keyframes sampled across the clip in temporal order. "
-SOM_SENTENCE = (
-    "The last image marks candidate object regions with numbered colored circles; "
-    "the numbers are reference options only and may include irrelevant regions. "
-)
 CALIBRATION_SENTENCE = (
     "Evidence may be incomplete or mismatched; if the images disagree with the video, "
     "trust the video and ignore the images. "
@@ -51,8 +46,6 @@ NECESSITY_PROMPTS = {
                "of the earlier keyframe only."),
     "latest": ("Look at the badge numbers and progress bars on the keyframes. Which badge number "
                "corresponds to the latest moment in the clip? Answer with the number only."),
-    "mark": ("Look at the numbered circle marks in the last image. Which mark number is closest to the "
-             "{hand} hand? Answer with the number only."),
 }
 
 ARBITRATION_PROMPT = (
@@ -87,33 +80,25 @@ def evidence_images(cfg: dict[str, Any], meta: dict[str, Any], spec: dict[str, A
     subset = spec.get("keyframe_subset")
     if subset and len(paths) > int(subset):
         paths = [paths[i] for i in subset_indices(len(paths), int(subset))]
-    if corruption and corruption.get("mode") in {"shuffled", "badge_perm"} and corruption.get("shuffle_order"):
+    if corruption and corruption.get("mode") == "shuffled" and corruption.get("shuffle_order"):
         order = corruption["shuffle_order"]
         paths = [paths[i % len(paths)] for i in order[:len(paths)]] if paths else paths
-    if corruption and corruption.get("mode") == "partial" and corruption.get("donor"):
-        donor_meta = load_meta(cfg, corruption["donor"], spec)
-        donor_root = evidence_root(cfg, spec) / donor_meta["clip_id"]
-        donor_paths = _kf_paths(donor_root, donor_meta, use_badges)
-        from .corruption import CorruptionDraw
+    if corruption and corruption.get("mode") == "partial":
         draw = CorruptionDraw("partial", meta["clip_id"], None, corruption)
-        paths = apply_path_corruption(paths, draw, evidence_root(cfg, spec), donor_paths)
+        paths = apply_path_corruption(paths, draw, evidence_root(cfg, spec))
     if spec.get("inference_evidence") == "shuffled" and rng is not None and paths:
         paths = [paths[i] for i in rng.permutation(len(paths))]
-    if spec.get("use_som", True) and any(a["type"] == "som" for a in meta["assets"]):
-        paths.append(str(root / "som.jpg"))
     if corruption and corruption.get("mode") == "absent":
         return []
     return paths[: int(cfg["vlm"]["max_images"])]
 
 
-def evidence_sentence(spec: dict[str, Any], has_som: bool, calibrated: bool = False) -> str:
+def evidence_sentence(spec: dict[str, Any], calibrated: bool = False) -> str:
     parts = []
     if spec.get("use_badges", True):
         parts.append(BADGE_SENTENCE)
     else:
         parts.append(PLAIN_KF_SENTENCE)
-    if spec.get("use_som", True) and has_som:
-        parts.append(SOM_SENTENCE)
     if calibrated or spec.get("reliability_mix") or spec.get("arbitration"):
         parts.append(CALIBRATION_SENTENCE)
     return "".join(parts)
@@ -173,18 +158,17 @@ def make_messages(cfg: dict[str, Any], row: dict[str, Any], spec: dict[str, Any]
         meta = load_meta(cfg, eid, spec)
         for path in evidence_images(cfg, meta, spec, rng, corruption=corruption):
             content.append({"type": "image", "image": path})
-    has_som = bool(meta and any(a["type"] == "som" for a in meta.get("assets", [])))
     calibrated = bool(spec.get("reliability_mix") or spec.get("arbitration"))
     if task == "main":
-        sentence = evidence_sentence(spec, has_som, calibrated) if use_evidence or calibrated else ""
+        sentence = evidence_sentence(spec, calibrated) if use_evidence or calibrated else ""
         if not use_evidence and calibrated:
             sentence = CALIBRATION_SENTENCE
         prompt = MAIN_PROMPT.format(hand_focus=hand_focus(row["target_hand"]),
                                     evidence_sentence=sentence)
     elif task == "arbitration":
-        prompt = evidence_sentence(spec, has_som, calibrated=True) + ARBITRATION_PROMPT
+        prompt = evidence_sentence(spec, calibrated=True) + ARBITRATION_PROMPT
     elif task in NECESSITY_PROMPTS:
-        prompt = evidence_sentence(spec, has_som) + NECESSITY_PROMPTS[task].format(hand=row["target_hand"])
+        prompt = evidence_sentence(spec) + NECESSITY_PROMPTS[task].format(hand=row["target_hand"])
     else:
         raise KeyError(f"Unknown task {task!r}")
     content.append({"type": "text", "text": prompt})
@@ -210,9 +194,6 @@ def necessity_items(cfg: dict[str, Any], row: dict[str, Any], spec: dict[str, An
                       "degraded": False, "corruption": None})
     if rng.random() < fraction:
         items.append({"row": row, "task": "latest", "answer": str(necessity.get("keyframe_count", 1)),
-                      "degraded": False, "corruption": None})
-    if spec.get("use_som", True) and "mark_nearest_hand" in necessity and rng.random() < fraction:
-        items.append({"row": row, "task": "mark", "answer": str(necessity["mark_nearest_hand"]),
                       "degraded": False, "corruption": None})
     return items
 

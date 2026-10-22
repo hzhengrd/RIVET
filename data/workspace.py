@@ -1,22 +1,7 @@
 """Per-scan workspace ROI for IKEA ASM (and any full-scene external dataset).
 
-WHY
----
-HA-ViD's training input is a cropped workspace view (`lh_v0`). IKEA ASM's dev3
-camera instead frames the whole room, so the person and table occupy a small
-part of the frame. Measured on a real clip, MediaPipe finds **0 hands in 48
-full frames**, but 9-10 detections in the same 16 frames after a workspace crop.
-Feeding one dataset close-up workspace evidence and the other a wide room shot
-makes any cross-dataset comparison a comparison of framing, not of method.
-
-HOW
----
-The camera is static per scan, so a single rectangle suffices for the whole
-scan (a fixed rectangle also avoids frame-to-frame jitter that would corrupt
-the wrist kinematics). The ROI is the bounding box of sustained motion --
-where the person and the furniture parts actually are -- computed by
-accumulating absolute frame differences over frames sampled across the scan,
-thresholding, and padding.
+The static camera is cropped to the bounding box of sustained motion, so the
+input matches HA-ViD's cropped workspace view.
 
     python -m data.workspace \
         --videos artifacts/ikea/videos --camera dev3 \

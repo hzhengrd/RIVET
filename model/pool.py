@@ -1,31 +1,7 @@
 """Build the pooled left+right ("dual-hand") split for a single unified model.
 
-One model trained on both hands, evaluated separately on each, tests whether the
-method needs a per-hand specialist at all.
-
-THE BLOCKER THIS SOLVES
------------------------
-clip_ids collide across hands: 1762 of them are shared between lh_train and
-rh_train, and 414 between the test sets. The same id names two genuinely
-different clips -- different crop (lh_v0 vs rh_v0_cropped) and different
-temporal bounds (e.g. S03A05I01M0_ibacb_0 is 3.27s on the left, 1.00s on the
-right). Evidence and features are keyed by clip_id
-(`evidence/{clip_id}/meta.json`, `features_vlm/{clip_id}.npy`), so pooling
-without disambiguation would silently make one hand read the other's evidence.
-
-Rows therefore get an `lh_`/`rh_` prefix on clip_id, and the merged evidence and
-feature trees are built as SYMLINKS to the per-hand originals -- no copying, and
-the originals stay untouched.
-
-What makes the pooled setup sound, verified on the current manifests:
-  - no cross-split leakage: lh_train ∩ rh_test = 0 and rh_train ∩ lh_test = 0
-  - shared label space: verbs 6/6, tools 5/4, manip 24/25, target 27/28,
-    union of valid tuples 73 (vs 67 and 68 alone)
-  - colliding ids carry the SAME label in 1762/1762 cases, i.e. the two hands
-    annotate the same action from their own perspective
-  - the prompt already conditions on the hand via
-    data.common.hand_focus -> "Focus only on the left/right hand."
-    so one model can be told which hand to answer for.
+clip_ids collide across hands, so rows get an `lh_`/`rh_` prefix and the merged
+evidence and feature trees are built as symlinks to the per-hand originals.
 
     python -m model.pool --out_root artifacts/havid
 """

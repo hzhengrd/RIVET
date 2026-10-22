@@ -1,9 +1,8 @@
 """Stage-1 LoRA SFT and Stage-2 evidence-adapter training.
 
 Baselines (video_only, rivet_sft, rivet_r_sft): standard LoRA SFT.
-Adapter cells (*_e / *_e_res): load a parent LoRA and joint-train
-EvidenceActionAdapter with a slot auxiliary loss and a reliability gate.
-Residualization is optional.
+Adapter cells (*_e / *_e_res): load a parent LoRA and joint-train the
+selected adapter with a slot auxiliary loss and a reliability gate.
 """
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ from .corruption import gate_target
 from .experiment import complete_marker, run_dir, variant_spec
 from .features import load_feature
 from .grammar import load_train_grammar
-from .adapter import AdapterHook, EvidenceActionAdapter, adapter_config, hidden_size
+from .adapter import AdapterHook, AdapterClass, adapter_config, hidden_size
 from .prompts import build_training_items, make_messages
 from .utils import environment_snapshot, is_extended_clip, read_jsonl, set_seed, write_json
 
@@ -159,7 +158,6 @@ def main() -> None:
         grammar = load_train_grammar(cfg, args.train_split)
         rapt_cfg = adapter_config(
             cfg,
-            residualize=spec.get("residualize", False),
             utility_gate=spec.get("utility_gate", True),
             slot_aux=spec.get("slot_aux", True),
             bank_mode=spec.get("bank_mode", "evidence"),
@@ -174,10 +172,12 @@ def main() -> None:
                 feat_dim = int(np.load(sample).shape[-1])
             else:
                 feat_dim = int(cfg.get("features", {}).get("fallback_dim", 96))
-        adapter = EvidenceActionAdapter(
+        if AdapterClass is None:
+            raise RuntimeError("No adapter class selected; launch via run_spatial/run_hand_anchored/run_informative")
+        adapter = AdapterClass(
             hidden_size(model), feat_dim, rapt_cfg, slot_vocab=grammar.get("slot_vocab"),
         ).to(args.device, dtype=dtype)
-        layer = int(spec.get("injection_layer", cfg["rapt"].get("injection_layer", 16)))
+        layer = int(spec.get("injection_layer", cfg["rapt"].get("injection_layer", 0)))
         hook = AdapterHook(model, adapter, layer)
 
     lora_params = [p for p in model.parameters() if p.requires_grad]
@@ -268,7 +268,7 @@ def main() -> None:
             torch.save(adapter.state_dict(), dest / "v5_rapt_adapter.pt")
             write_json(dest / "v5_rapt_adapter_config.json", {
                 "rapt": rapt_cfg, "feature_dim": int(adapter.learned_bank.shape[-1]),
-                "layer": int(spec.get("injection_layer", cfg["rapt"].get("injection_layer", 16))),
+                "layer": int(spec.get("injection_layer", cfg["rapt"].get("injection_layer", 0))),
                 "d_model": hidden_size(model),
             })
 
@@ -327,21 +327,15 @@ def main() -> None:
                     gate_loss = F.binary_cross_entropy_with_logits(
                         current["gate_logit"], target.expand_as(current["gate_logit"]),
                     )
-                residual_loss = nll.new_zeros(())
-                if rapt_cfg.get("residualize", False) and "predicted" in current:
-                    residual_loss = F.mse_loss(current["predicted"], current["action"].detach())
-                    residual_loss = residual_loss + current.get("quantizer_loss", nll.new_zeros(()))
                 loss = (
                     nll
                     + float(train_cfg.get("lambda_slot", 0.5)) * slot_loss
                     + float(train_cfg.get("lambda_gate", 0.25)) * gate_loss
-                    + float(train_cfg.get("lambda_residual", 0.1)) * residual_loss
                 )
                 diagnostics = {
                     "task_loss": float(nll.detach()),
                     "slot_loss": float(slot_loss.detach()),
                     "gate_loss": float(gate_loss.detach()),
-                    "residual_loss": float(residual_loss.detach()),
                     "gate": float(current["gate"].mean().detach()) if "gate" in current else None,
                 }
 

@@ -1,30 +1,7 @@
 """Run SpatialEvidenceAdapter with the auxiliary slot loss restricted to
-*informative* slots.
-
-WHY
----
-The auxiliary head of Eq. (slot loss) averages a cross-entropy over every slot
-whose gold value lies in the training vocabulary. Whether a slot carries
-information, however, is a property of the dataset's annotation, not of the
-method:
-
-    HA-ViD        no degenerate slot
-    Assembly101   |V(status)| = 1   -- every segment is "active"
-    IKEA ASM      |V(tool)|   = 1   -- the corpus annotates no tools
-
-For a slot with a single value the classifier is a two-way head whose target is
-constant; its cross-entropy collapses to ~0 within a few hundred steps and
-thereafter contributes nothing but a zero term to the mean. The effect is that
-lambda_slot is silently divided among five slots when only four carry signal --
-on IKEA ASM the informative slots receive 0.4 of the intended 0.5.
-
-This runner restricts the auxiliary loss to slots with |V| > 1. It is an
-internal training detail: the output schema, the prompt, the grammar and every
-reported metric are unchanged, so results remain comparable across datasets and
-with the literature. Dropping a degenerate slot from the *output* instead would
-have made the schema dataset-specific and the exact-match metric incomparable
-across corpora, for a gain bounded by the rate at which a model mispredicts a
-constant field.
+informative slots (|V(s)| > 1), so datasets with one degenerate slot
+(status on Assembly101, tool on IKEA ASM) do not dilute lambda_slot. The output
+schema, prompt, grammar and reported metrics are unchanged.
 
     python -m model.run_informative train --config ... --variant ...
     python -m model.run_informative infer --config ... --variant ...
@@ -81,7 +58,7 @@ def main() -> None:
         from . import train as target
     else:
         from . import infer as target
-    target.EvidenceActionAdapter = InformativeSlotAdapter
+    target.AdapterClass = InformativeSlotAdapter
     print(f"[run_informative] {mode}: adapter = InformativeSlotAdapter")
     target.main()
 

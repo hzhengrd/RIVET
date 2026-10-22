@@ -1,52 +1,7 @@
 """Long-tail augmentation for the pooled dual-hand split.
 
-WHY THIS IS *NOT* OVERSAMPLING
-------------------------------
-The pooled build already ran the duplication experiment for us. Merging the two
-hands roughly doubled every tail class's training count, and every accuracy
-bucket got *worse* (right-hand test, epoch 4, pooled vs the right-hand
-specialist):
-
-    freq bucket   rh train -> pooled    specialist -> pooled
-    <10             63 ->  113 (1.79x)    0.0952 -> 0.0476
-    10-29          377 ->  849 (2.25x)    0.4333 -> 0.3417
-    30-99          931 -> 1879 (2.02x)    0.6261 -> 0.5522
-
-So more *copies* of the same footage does not help; ~45% of the 1762 shared
-clip_ids are the same time window under the same crop box, i.e. near-identical
-frames carrying the same label. Augmentation therefore has to produce genuinely
-different pixels, which means new keyframes, new evidence and new vision
-features -- not a reweighted sampler.
-
-WHAT THE ERRORS SAY TO AUGMENT
-------------------------------
-On the 141 tail-class test clips the specialist's slot accuracies are
-
-    tool 0.986 | status 0.894 | verb 0.731 | manipulated_object 0.560 | target_object 0.475
-
-and only 17% of the failures are one-slot-off. Tail failure is not a fuzzy
-decision boundary that more samples would sharpen; it is the model not resolving
-*which object*. The two ops below are chosen for that:
-
-  temporal sub-window  a different span of the clip -> the keyframe selector
-                       lands on different frames -> genuinely different evidence
-                       images and a different feature grid.
-  spatial jitter       translate + rescale inside the fixed (450,100,1100,700)
-                       workspace box -> the same part appears at a different
-                       scale and image position, which is exactly the invariance
-                       manipulated_object / target_object are missing.
-
-NO HORIZONTAL FLIP. A mirror swaps which side of the frame each hand is on while
-the prompt still says "Focus only on the left hand", so it would corrupt the one
-signal the dual-hand model is supposed to learn.
-
-K IS CAPPED
------------
-Filling every class to `--target` would demand 59 variants of a 1-clip class.
-Past a handful of variants the crops overlap so heavily that the result is
-oversampling with noise -- the thing shown above not to work. `--max_per_clip`
-(default 4) caps it, so rare classes grow by a bounded factor and simply do not
-reach the target.
+Produces temporal sub-windows and spatial jitter inside the workspace box, capped
+at `--max_per_clip` variants per clip. No horizontal flip.
 
     python -m model.augment \
         --manifest artifacts/havid/manifests/train.jsonl \

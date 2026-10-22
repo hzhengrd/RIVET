@@ -1,28 +1,7 @@
-"""Per-keyframe box of the *asked-about* hand, aligned to the vision feature grid.
+"""Per-keyframe box of the asked-about hand, aligned to the vision feature grid.
 
-WHY THIS EXISTS
----------------
-In the pooled dual-hand setting the two hands are told apart by exactly one
-thing: the sentence "Focus only on the left/right hand." Everything else is
-identical -- the crop box is literally the same constant (450,100,1100,700) for
-both hands (data/havid_side.py), and for ~45% of the 1762 clip_ids
-shared between the hands the annotated time window is the same too, with the
-same label. A text clause names the hand but never says *where it is*, so the
-adapter's evidence grid carries no way to act on it. Measured consequence: the
-pooled model over-calls "active" on idle right-hand clips (34.2% vs 18.9% for
-the right-hand specialist), which alone is over half its 0.104 accuracy deficit.
-
-This script supplies the missing signal. For every evidence keyframe it runs the
-same MediaPipe HandLandmarker the evidence builder uses, applies the same
-mirror correction, and follows the same nearest-centre track, then stores the
-target hand's box in NORMALISED image coordinates.
-
-Boxes are computed on the keyframe JPEGs, which are the exact images
-features_vlm encodes into the (T,4,4,1152) grid, so box -> grid cell
-is a direct mapping with no resampling assumption.
-
-This is not SoM. Nothing is drawn and nothing enters the prompt; the geometry is
-consumed numerically inside the adapter (model/hand_anchored.py).
+Runs MediaPipe HandLandmarker on each evidence keyframe and stores the target
+hand's box in normalised image coordinates.
 
     python -m model.hand_boxes \
         --config configs/havid.yaml \

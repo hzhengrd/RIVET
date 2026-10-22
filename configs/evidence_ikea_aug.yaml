@@ -18,4 +18,3 @@ data:
 evidence:
   source: video
   output_dirname: evidence
-  include_som: false

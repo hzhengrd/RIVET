@@ -1,41 +1,7 @@
 """Spatially grounded evidence injector.
 
-Drop-in replacement for EvidenceActionAdapter, motivated by measurements on the
-trained r_sft_e_L0 run rather than by intuition.
-
-WHAT THE DIAGNOSTICS SHOWED
----------------------------
-1. The bank contributes nothing. evidence / learned / shuffled / 96-d histogram
-   all score the same (0.6408 / 0.6425 / 0.6408; McNemar p=1.0, 97-99% of
-   predictions byte-identical). So the pathway carries no usable signal today.
-2. It is not the gate: gate is open (0.88 train, 0.72 infer), so this is NOT the
-   old "gate closed the pathway" failure.
-3. It is not temporal coverage: the 10 keyframes linearly interpolate a dense
-   32-frame feature trajectory to within frame-to-frame noise (0.052 vs 0.059).
-4. The residual error is dominated by target_object: 44 of 71 exact failures are
-   target-only, and its accuracy on active clips is 0.661 vs 0.949 for tool.
-
-TWO CONCRETE DEFECTS THIS FIXES
--------------------------------
-a) **No spatial position anywhere.** PhaseTokenReducer flattens the (T,H,W) grid
-   with `grid.reshape(batch, time*height*width, -1)` and adds a Gaussian prior
-   over *frame time only*. Nothing tells the adapter which cell a feature came
-   from, so it cannot represent "the screw went into the upper-left hole" -- the
-   exact distinction target_object needs. Here the grid gets separable learned
-   time/row/column embeddings before any attention.
-
-b) **A fixed-query bottleneck placed before the question is known.** 160 grid
-   positions are squeezed into 6 tokens by 6 *learned constant* queries, and only
-   then does the LM cross-attend to those 6. The compression therefore decides
-   what to keep without knowing whether the model is currently emitting `verb` or
-   `target_object`. Here the LM hidden states attend **directly over the full
-   positional grid**, so the query -- which is conditioned on what is being
-   generated -- selects the relevant cells itself. 160 keys instead of 6 is
-   negligible compute.
-
-Everything else is deliberately unchanged (utility gate, slot-aux head, residual
-option, bank_mode semantics, injection site) so a v1-vs-v2 comparison isolates
-the reducer/positional change.
+Hidden-conditioned cross-attention over a positional evidence grid, with a
+utility gate, a slot auxiliary head and a learnable injection scale.
 """
 from __future__ import annotations
 
@@ -92,21 +58,13 @@ class SpatialEvidenceAdapter(nn.Module):
         self.query_norm = nn.LayerNorm(d_model)
         self.cross_attention = nn.MultiheadAttention(d_model, int(cfg.get("phase_heads", 8)),
                                                      batch_first=True)
-        # summary tokens are kept only to drive the gate and the slot-aux head,
-        # NOT as the bottleneck the LM has to read through
+        # summary tokens drive the gate and the slot-aux head only
         self.summary_queries = nn.Parameter(torch.randn(count, dim) * 0.02)
         self.utility = nn.Sequential(
             nn.LayerNorm(d_model + dim), nn.Linear(d_model + dim, dim // 2), nn.GELU(),
             nn.Linear(dim // 2, 1),
         )
-        # NOT zero-initialised. v1 starts alpha at 0 so the injector begins as a
-        # no-op and has to learn its way open -- but the main path is already
-        # saturated (task_loss ~0.005 on the trained r_sft_e_L0), so there is no
-        # residual error to push it. Measured after 12384 steps: alpha = -0.00077,
-        # i.e. an injection scale of tanh(alpha)*gate ~= -0.0006. The pathway was
-        # effectively closed regardless of what the bank contained. Starting at a
-        # small positive value makes the adapter contribute from step 0 and lets
-        # the utility gate learn *when* to use it instead.
+        # positive init so the adapter contributes from step 0
         self.alpha = nn.Parameter(torch.full((), float(cfg.get("alpha_init", 0.1))))
         self.learned_bank = nn.Parameter(torch.randn(1, max(2, count // 2), 4, 4, feature_dim) * 0.02)
         self._grid: torch.Tensor | None = None
@@ -117,7 +75,6 @@ class SpatialEvidenceAdapter(nn.Module):
             for slot in SLOTS:
                 self.slot_heads[slot] = nn.Linear(dim, max(2, len(slot_vocab.get(slot, []))))
 
-    # same external contract as EvidenceActionAdapter
     def set_grid(self, grid: torch.Tensor | None) -> None:
         self._grid = grid
 

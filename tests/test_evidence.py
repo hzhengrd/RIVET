@@ -1,9 +1,6 @@
 """Offline tests for the released evidence builder: pure-python/numpy only.
 
-Evidence-construction tests: keyframe selection,
-badge/mark rendering and proposal ranking. The package's own training, grammar
-and reward machinery belongs to an earlier line of work that this method does
-not use, so it is neither shipped nor tested here.
+Evidence-construction tests: keyframe selection and badge rendering.
 """
 from __future__ import annotations
 
@@ -17,9 +14,8 @@ try:
 except ImportError:  # tests stay runnable via the plain-python fallback runner
     pytest = None
 
-from data.evidence import (badge_keyframe, classical_proposals, draw_pointer_marks,
-                                        energy_keyframes, keyframe_change_pair, rank_proposals,
-                                        select_keyframes, stratified_keyframes)
+from data.evidence import (badge_keyframe, energy_keyframes, keyframe_change_pair,
+                           select_keyframes, stratified_keyframes)
 from data.evidence_utils import SLOTS, structured_answer
 
 GRAMMAR = {
@@ -83,39 +79,8 @@ def test_keyframe_change_pair_pixel_arithmetic():
     assert keyframe_change_pair(frames, [0, 1, 2, 3]) == 2
 
 
-def test_badge_and_marks_render():
+def test_badge_render():
     frame = np.random.default_rng(0).integers(0, 255, (240, 320, 3)).astype(np.uint8)
     badged = badge_keyframe(frame, 2, 6, 0.25, 224)
     assert badged.shape[1] == 224 and badged.ndim == 3
-    marked, marks = draw_pointer_marks(frame, [(10, 10, 60, 60), (100, 80, 180, 160)], 224)
-    assert len(marks) == 2 and marks[0]["id"] == 1
-    assert marked.shape[1] == 224
-    # badge and marks must actually change pixels
     assert not np.array_equal(badged[:20, :40], frame[:20, :40])
-
-
-def test_rank_proposals_prefers_hand_adjacent_moving_regions():
-    motion = np.zeros((200, 300), dtype=np.float32)
-    motion[80:120, 40:90] = 20.0     # moving region near the hand
-    motion[20:60, 220:280] = 20.0    # moving region far from the hand (occlusion flicker)
-    hand = [np.asarray([70.0, 100.0], dtype=np.float32)]
-    near, far, static_far = (40, 80, 90, 120), (220, 20, 280, 60), (200, 150, 260, 190)
-    kept = rank_proposals([far, static_far, near], motion, hand, 3, hand_scale_px=50.0,
-                          min_regions=1)
-    assert kept[0] == near
-    # the adaptive cutoff drops far/static leftovers instead of padding to max
-    assert static_far not in kept
-    # without a hand track, motion is the only signal: both moving regions rank first
-    kept_no_hand = rank_proposals([static_far, far, near], motion, [], 3)
-    assert set(kept_no_hand[:2]) == {near, far}
-
-
-def test_classical_proposals_return_boxes():
-    frame = np.zeros((240, 320, 3), dtype=np.uint8)
-    frame[50:120, 60:140] = 255
-    frame[150:200, 200:280] = 180
-    boxes = classical_proposals(frame, 8, 0.0008)
-    assert boxes, "expected at least one proposal"
-    assert all(len(box) == 4 for box in boxes)
-
-

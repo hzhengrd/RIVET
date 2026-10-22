@@ -1,10 +1,10 @@
 """Run training and inference with SpatialEvidenceAdapter (model/spatial.py).
 
 The stock trainer and inferencer are left untouched: this rebinds the
-`EvidenceActionAdapter` name inside their module namespaces before calling
-`main()`. Python resolves module globals at call time, so the swap takes effect
-without editing a single line of the shipped code, and any run launched through
-the original entry points is unaffected.
+`AdapterClass` name inside their module namespaces before calling `main()`.
+Python resolves module globals at call time, so the swap takes effect without
+editing the shipped code, and any run launched through the original entry
+points is unaffected.
 
     python -m model.run_spatial train  --config ... --variant ... --seed 17 ...
     python -m model.run_spatial infer  --config ... --variant ... --seed 17 ...
@@ -19,7 +19,7 @@ from .spatial import SpatialEvidenceAdapter
 
 
 def _patch(module) -> None:
-    module.EvidenceActionAdapter = SpatialEvidenceAdapter
+    module.AdapterClass = SpatialEvidenceAdapter
 
 
 def main() -> None:

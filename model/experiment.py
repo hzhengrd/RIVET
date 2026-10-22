@@ -12,10 +12,8 @@ from .config import output_path, repo_path
 #   Combine (parent × residual): sft_e, sft_e_res, r_sft_e, r_sft_e_res, r_grpo_e, r_grpo_e_res
 #
 # Adapter fields:
-#   rapt: enable EvidenceActionAdapter
-#   residualize: residual on/off
+#   rapt: enable the selected adapter
 #   init_variant: parent LoRA to load
-#   freeze_vlm: adapter-only (secondary ablation)
 #   bank_mode: evidence | learned | shuffled
 
 def _combine(parent: str, residual: bool, name: str, **extra: Any) -> dict[str, Any]:
@@ -24,7 +22,7 @@ def _combine(parent: str, residual: bool, name: str, **extra: Any) -> dict[str, 
         "stage": "sft",
         "evidence": True,
         "use_badges": True,
-        "use_som": True,
+        
         "necessity": True,
         "degrade": True,
         "reliability_mix": reliability,
@@ -48,26 +46,26 @@ BUILTINS: dict[str, dict[str, Any]] = {
         "reliability_mix": False, "arbitration": False, "rapt": False, "baseline": None,
     },
     "rivet_sft": {
-        "stage": "sft", "evidence": True, "use_badges": True, "use_som": True,
+        "stage": "sft", "evidence": True, "use_badges": True, 
         "necessity": True, "degrade": True, "reliability_mix": False,
         "arbitration": False, "rapt": False, "baseline": "video_only",
     },
     "rivet_r_sft": {
-        "stage": "sft", "evidence": True, "use_badges": True, "use_som": True,
+        "stage": "sft", "evidence": True, "use_badges": True, 
         "necessity": True, "degrade": True, "reliability_mix": True,
         "arbitration": True, "rapt": False, "baseline": "video_only",
     },
     # 2 extra epochs on the orig rivet_r_sft LoRA, with tail oversampling.
     # Does not overwrite the 2-epoch parent.
     "rivet_r_sft_e4os": {
-        "stage": "sft", "evidence": True, "use_badges": True, "use_som": True,
+        "stage": "sft", "evidence": True, "use_badges": True, 
         "necessity": True, "degrade": True, "reliability_mix": True,
         "arbitration": True, "rapt": False, "init_variant": "rivet_r_sft",
         "baseline": "rivet_r_sft",
     },
     "rivet_r_grpo": {
         "stage": "grpo", "init_variant": "rivet_r_sft", "evidence": True,
-        "use_badges": True, "use_som": True, "do_no_harm": True,
+        "use_badges": True,  "do_no_harm": True,
         "rapt": False, "baseline": "rivet_r_sft",
     },
     # Main combine matrix
@@ -82,7 +80,7 @@ BUILTINS: dict[str, dict[str, Any]] = {
     ),
     # From-scratch joint LoRA + L0 adapter (no parent). Control for two-stage.
     "r_sft_e_L0_joint": {
-        "stage": "sft", "evidence": True, "use_badges": True, "use_som": True,
+        "stage": "sft", "evidence": True, "use_badges": True, 
         "necessity": True, "degrade": True, "reliability_mix": True,
         "arbitration": True, "rapt": True, "residualize": False, "slot_aux": True,
         "utility_gate": True, "bank_mode": "evidence", "freeze_vlm": False,

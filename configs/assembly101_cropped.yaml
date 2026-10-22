@@ -29,7 +29,6 @@ data:
 evidence:
   reuse_root: artifacts/assembly101_cropped/evidence
   output_dirname: evidence
-  include_som: false
 
 features:
   output_dirname: features_vlm

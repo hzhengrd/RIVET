@@ -1,34 +1,9 @@
-"""Derive ONE shared crop window for the view-1 pair (lh_v1 + rh_v1).
+"""Derive one shared crop window for the view-1 pair (lh_v1 + rh_v1).
 
-WHY IT HAS TO BE DERIVED, NOT REUSED
-------------------------------------
-View 0's box is the constant (450,100,1100,700) recovered by template-matching
-lh_v0 against lh_v0_original. View 1 is a different camera, so that box means
-nothing here; the workspace sits somewhere else in the frame.
-
-WHY ONE BOX FOR BOTH HANDS
---------------------------
-Exactly the reasoning that produced the view-0 pair: rh_v0 was cropped with the
-lh_v0 box so that any left-vs-right difference could not be a difference of
-framing (data/havid_side.py). lh_v1 and rh_v1 are the same recordings
-from the same camera -- only the annotation differs -- so a single box is both
-correct and required for the comparison to mean anything. Evidence is therefore
-pooled across the two directories before the box is fitted.
-
-HOW THE BOX IS CHOSEN
----------------------
-Two independent signals, and the box must satisfy both:
-
-  motion    frame-to-frame absolute difference accumulated over sampled frames of
-            sampled clips -> where the assembly actually happens.
-  hands     MediaPipe HandLandmarker boxes on the same frames -> where the hands
-            actually go. A crop that clips a hand would silently damage the very
-            signal the dual-hand model depends on, so hand coverage is a hard
-            constraint, not a tiebreak.
-
-The reported box is the union of (motion percentile box) and (hand box hull at
-the requested coverage), padded, clamped, and rounded to even dimensions so
-libx264 accepts it.
+The box must satisfy two signals: frame-to-frame motion (where the assembly
+happens) and MediaPipe hand boxes (where the hands go; hand coverage is a hard
+constraint). The reported box is the union of both, padded and rounded to even
+dimensions.
 
     python -m data.crop_havid --clips 80 --out_dir outputs/v1_crop
 """

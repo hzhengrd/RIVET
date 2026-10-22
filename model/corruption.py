@@ -1,4 +1,11 @@
-"""Mixed-reliability evidence corruption for parent checkpoints and gate targets."""
+"""Mixed-reliability evidence corruption for the reliability gate.
+
+Matches the paper's five modes (Section 3.2.3): an intact packet (correct), a
+shuffled keyframe order (shuffled), a partially removed packet (partial),
+substitution by another clip's packet (wrong), and complete removal (absent).
+Each mode carries a binary arbitration target: only an intact packet still
+depicts the queried clip with usable structure.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,36 +14,26 @@ from typing import Any, Literal
 
 import numpy as np
 
-CorruptionMode = Literal[
-    "correct", "shuffled", "partial", "wrong", "absent", "mark_jitter", "badge_perm"
-]
+CorruptionMode = Literal["correct", "shuffled", "partial", "wrong", "absent"]
 
 DEFAULT_SCHEDULE: dict[str, float] = {
-    "correct": 0.45,
-    "shuffled": 0.10,
-    "partial": 0.15,
-    "mark_jitter": 0.05,
-    "badge_perm": 0.05,
-    "wrong": 0.10,
-    "absent": 0.10,
+    "correct": 0.50,
+    "shuffled": 0.11,
+    "partial": 0.17,
+    "wrong": 0.11,
+    "absent": 0.11,
 }
 
-RELIABILITY_MODES: list[str] = [
-    "correct", "shuffled", "partial", "mark_jitter", "badge_perm", "wrong", "absent",
-]
+RELIABILITY_MODES: list[str] = ["correct", "shuffled", "partial", "wrong", "absent"]
 
-ARBITRATION_LABELS: dict[str, str | None] = {
-    "correct": "yes",
-    "mark_jitter": "yes",
-    "shuffled": "no",
-    "partial": "no",
-    "badge_perm": "no",
-    "wrong": "no",
-    "absent": None,
+# Binary arbitration target of Eq. (arbitration): a(m) = 1 only for an intact packet.
+GATE_TARGET: dict[str, float] = {
+    "correct": 1.0,
+    "shuffled": 0.0,
+    "partial": 0.0,
+    "wrong": 0.0,
+    "absent": 0.0,
 }
-
-# Gate should open on modes that still depict the same clip with usable structure.
-GATE_OPEN_MODES = {"correct", "mark_jitter", "partial", "shuffled", "badge_perm"}
 
 
 @dataclass
@@ -62,64 +59,44 @@ def draw_corruption(row: dict[str, Any], rows: list[dict[str, Any]], index: int,
     mode = mode or sample_mode(rng, schedule)
     clip_id = row["clip_id"]
     if mode == "absent":
-        return CorruptionDraw("absent", None, None, {"matches_video": False})
+        return CorruptionDraw("absent", None, None, {"usable": False})
     if mode == "wrong":
         alt = next((rows[(index + offset) % len(rows)]
                     for offset in range(1, len(rows))
                     if rows[(index + offset) % len(rows)]["label"] != row["label"]),
                    rows[(index + 1) % len(rows)])
         return CorruptionDraw("wrong", alt["clip_id"], None,
-                              {"matches_video": False, "donor": alt["clip_id"]})
-    if mode in {"shuffled", "badge_perm"}:
+                              {"usable": False, "donor": alt["clip_id"]})
+    if mode == "shuffled":
         order = list(map(int, rng.permutation(n_keyframes)))
-        return CorruptionDraw(mode, clip_id, order, {"matches_video": False})
+        return CorruptionDraw("shuffled", clip_id, order, {"usable": False})
     if mode == "partial":
-        donor = rows[(index + 1 + int(rng.integers(0, max(1, len(rows) - 1)))) % len(rows)]
-        swap_idx = sorted(map(int, rng.choice(n_keyframes, size=max(1, n_keyframes // 2), replace=False)))
-        return CorruptionDraw("partial", clip_id, None,
-                              {"matches_video": False, "donor": donor["clip_id"], "swap_idx": swap_idx})
-    if mode == "mark_jitter":
-        return CorruptionDraw("mark_jitter", clip_id, None,
-                              {"matches_video": True, "jitter_px": int(rng.integers(8, 40))})
-    return CorruptionDraw("correct", clip_id, None, {"matches_video": True})
+        remove_idx = sorted(map(int, rng.choice(n_keyframes, size=max(1, n_keyframes // 2), replace=False)))
+        return CorruptionDraw("partial", clip_id, None, {"usable": False, "remove_idx": remove_idx})
+    return CorruptionDraw("correct", clip_id, None, {"usable": True})
 
 
 def arbitration_label(draw: CorruptionDraw) -> str:
-    return "yes" if draw.notes.get("matches_video") else "no"
+    return "yes" if draw.notes.get("usable") else "no"
 
 
 def gate_target(mode: str | None) -> float:
-    """Reliability gate soft target: 1 open, 0 closed."""
-    if mode is None or mode in GATE_OPEN_MODES:
-        return 1.0 if mode in {"correct", "mark_jitter", None} else 0.5
-    return 0.0
+    """Reliability gate binary target: 1 open, 0 closed."""
+    return GATE_TARGET.get(mode, 0.0)
 
 
 def apply_path_corruption(paths: list[str], draw: CorruptionDraw,
                           evidence_root: Path, donor_paths: list[str] | None = None) -> list[str]:
     if draw.mode == "absent":
         return []
-    if draw.mode in {"shuffled", "badge_perm"} and draw.shuffle_order is not None and paths:
-        kf = [p for p in paths if "som" not in Path(p).name]
-        som = [p for p in paths if "som" in Path(p).name]
+    if draw.mode == "shuffled" and draw.shuffle_order is not None and paths:
         order = draw.shuffle_order
-        if len(order) >= len(kf):
-            kf = [kf[i] for i in order[:len(kf)]]
-        else:
-            kf = [kf[i % len(kf)] for i in order] + kf[len(order):]
-        return kf + som
-    if draw.mode == "partial" and donor_paths and paths:
-        kf = [p for p in paths if "som" not in Path(p).name]
-        som = [p for p in paths if "som" in Path(p).name]
-        donor_kf = [p for p in donor_paths if "som" not in Path(p).name]
-        swap = set(draw.notes.get("swap_idx", []))
-        out = []
-        for i, p in enumerate(kf):
-            if i in swap and i < len(donor_kf):
-                out.append(donor_kf[i])
-            else:
-                out.append(p)
-        return out + som
+        return [paths[i % len(paths)] for i in order[:len(paths)]]
+    if draw.mode == "partial" and paths:
+        remove = set(draw.notes.get("remove_idx", []))
+        return [p for i, p in enumerate(paths) if i not in remove]
+    if draw.mode == "wrong" and donor_paths:
+        return list(donor_paths[:len(paths)])
     return paths
 
 

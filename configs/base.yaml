@@ -26,26 +26,22 @@ evidence:
   output_dirname: evidence
   source: video
   num_keyframes: 10
-  include_som: true
   include_degraded_video: true
 
 features:
   spatial_h: 4
   spatial_w: 4
-  include_som: false
   feature_dim: 0          # 0 => infer from first .npy
   fallback_dim: 96
 
 reliability:
   enabled: true
   schedule:
-    correct: 0.45
-    shuffled: 0.10
-    partial: 0.15
-    mark_jitter: 0.05
-    badge_perm: 0.05
-    wrong: 0.10
-    absent: 0.10
+    correct: 0.50
+    shuffled: 0.11
+    partial: 0.17
+    wrong: 0.11
+    absent: 0.11
   arbitration_fraction: 0.30
   grpo_corrupt_fraction: 0.35
   do_no_harm_weight: 1.5
@@ -54,16 +50,10 @@ rapt:
   token_count: 6
   token_dim: 512
   phase_heads: 8
-  residualize: false      # overridden per variant
   utility_gate: true
   slot_aux: true
-  quantizer: continuous
-  fsq_levels: [8, 8, 8, 6, 5]
-  vq_codebook_size: 256
-  vq_latent_dim: 64
-  vq_commitment: 0.25
   token_dropout: 0.10
-  injection_layer: 16
+  injection_layer: 0
   bank_mode: evidence
 
 vlm:
@@ -97,7 +87,6 @@ sft:
 training:
   lambda_slot: 0.50
   lambda_gate: 0.25
-  lambda_residual: 0.10
 
 grpo:
   epochs: 1

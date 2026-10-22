@@ -23,16 +23,8 @@ evidence:
   num_keyframes: 10
   keyframe_method: energy   # motion-mass quantiles + transition snap; 'stratified'/'uniform' for ablations
   keyframe_size: 448
-  som_size: 640
-  max_marks: 8
-  min_mark_area_frac: 0.0008
-  max_mark_area_frac: 0.20   # reject person/background-sized segments
-  include_som: true
-  fastsam_path: models/FastSAM-s.pt
-  som_device: cpu
   min_detection_confidence: 0.35
   hand_landmarker_model: models/hand_landmarker.task  # mediapipe>=0.10.30 tasks API
-  pose_landmarker_model: models/pose_landmarker_lite.task  # person suppression for SoM ranking
   mediapipe_input_mirrored: false
   min_track_coverage: 0.40
   include_degraded_video: true

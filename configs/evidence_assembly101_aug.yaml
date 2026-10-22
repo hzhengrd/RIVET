@@ -6,9 +6,7 @@
 # are not rebuilt.
 #
 # Assembly101 annotates no acting hand: every row carries target_hand "both", so
-# build_clip() takes the hand-agnostic path (hands_per_frame) and emits no
-# mark_nearest_hand question. include_som stays false, matching the base build
-# and the finding that region marks do not help in this domain.
+# build_clip() takes the hand-agnostic path (hands_per_frame).
 extends: evidence.yaml
 
 project:
@@ -23,4 +21,3 @@ data:
 evidence:
   source: video
   output_dirname: evidence
-  include_som: false

@@ -37,9 +37,6 @@ def keyframe_paths(cfg: dict[str, Any], clip_id: str, use_badges: bool = True,
     subset = (spec or {}).get("keyframe_subset")
     if subset and len(paths) > int(subset):
         paths = [paths[i] for i in subset_indices(len(paths), int(subset))]
-    if cfg.get("features", {}).get("include_som", False) and (spec or {}).get("use_som", True) \
-            and any(a.get("type") == "som" for a in assets):
-        paths.append(str(root / "som.jpg"))
     return paths
 
 

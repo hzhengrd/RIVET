@@ -8,13 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import torch
-
 from model.corruption import draw_corruption, gate_target
 from model.experiment import BUILTINS, main_matrix_variants
 from model.grammar import composition_validity, parse
 from model.metrics import correctness
-from model.adapter import EvidenceActionAdapter
 
 
 def test_main_matrix_has_ten_variants():
@@ -42,55 +39,10 @@ def test_parse_and_exact_scoring():
 
 def test_gate_targets():
     assert gate_target("correct") == 1.0
+    assert gate_target("shuffled") == 0.0
+    assert gate_target("partial") == 0.0
     assert gate_target("wrong") == 0.0
     assert gate_target("absent") == 0.0
-
-
-def test_adapter_identity_at_init_and_slot_aux():
-    cfg = {
-        "token_count": 4, "token_dim": 16, "phase_heads": 4, "residualize": False,
-        "utility_gate": True, "slot_aux": True, "quantizer": "continuous",
-        "token_dropout": 0.0, "bank_mode": "evidence",
-    }
-    vocab = {
-        "status": ["active", "null"], "verb": ["pick up", "null"],
-        "manipulated_object": ["bolt", "not applicable"],
-        "target_object": ["table", "not applicable"], "tool": ["no tool"],
-    }
-    adapter = EvidenceActionAdapter(32, 24, cfg, slot_vocab=vocab)
-    assert float(adapter.alpha.detach()) == 0.0
-    adapter.set_grid(torch.randn(2, 3, 2, 2, 24))
-    hidden = torch.randn(2, 5, 32, requires_grad=True)
-    out = adapter(hidden)
-    assert out.shape == hidden.shape
-    # alpha=0 => exact identity
-    assert torch.allclose(out, hidden)
-    # Force a non-identity scale so gradients reach `hidden` through the residual path.
-    with torch.no_grad():
-        adapter.alpha.fill_(0.5)
-    out2 = adapter(hidden)
-    loss = out2.sum() + adapter.slot_aux_loss({
-        "status": "active", "verb": "pick up", "manipulated_object": "bolt",
-        "target_object": "table", "tool": "no tool",
-    })
-    loss.backward()
-    assert hidden.grad is not None
-    assert float(adapter.alpha.detach()) != 0.0
-
-
-def test_residual_changes_tokens():
-    cfg = {
-        "token_count": 4, "token_dim": 16, "phase_heads": 4, "residualize": True,
-        "utility_gate": False, "slot_aux": False, "quantizer": "continuous",
-        "token_dropout": 0.0, "bank_mode": "evidence",
-    }
-    adapter = EvidenceActionAdapter(32, 24, cfg)
-    with torch.no_grad():
-        adapter.alpha.fill_(1.0)
-    adapter.set_grid(torch.randn(1, 2, 2, 2, 24))
-    hidden = torch.zeros(1, 4, 32)
-    out = adapter(hidden)
-    assert not torch.allclose(out, hidden)
 
 
 def test_corruption_wrong_donor():

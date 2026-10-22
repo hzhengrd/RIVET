@@ -12,7 +12,7 @@ from .corruption import CorruptionDraw, draw_corruption, harm_levels
 from .experiment import prediction_path, run_dir, variant_spec
 from .features import load_feature
 from .grammar import apply_grammar, load_train_grammar, parse
-from .adapter import AdapterHook, EvidenceActionAdapter, hidden_size
+from .adapter import AdapterHook, AdapterClass, hidden_size
 from .prompts import make_messages
 from .utils import read_jsonl, sha256, write_jsonl
 
@@ -82,7 +82,9 @@ def main() -> None:
         if args.bank_mode:
             rapt["bank_mode"] = args.bank_mode
         grammar_tmp = load_train_grammar(cfg, train_split)
-        adapter = EvidenceActionAdapter(
+        if AdapterClass is None:
+            raise RuntimeError("No adapter class selected; launch via run_spatial/run_hand_anchored/run_informative")
+        adapter = AdapterClass(
             acfg["d_model"], acfg["feature_dim"], rapt,
             slot_vocab=grammar_tmp.get("slot_vocab"),
         ).to(args.device, dtype=dtype)

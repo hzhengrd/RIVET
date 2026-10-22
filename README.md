@@ -1,20 +1,47 @@
-# Query-Conditioned Compositional Assembly Action Understanding
+# RIVET: Rendered In-Video Evidence and Token-reconditioned Decoding
 
-Reference implementation of the method: one vision--language model answers an
-assembly action at a requested granularity (the workcell, or one designated
-hand) and emits a composition of slots rather than a single closed-set label.
+Reference implementation of RIVET, a vision-language model for fine-grained
+assembly action understanding. One VLM answers an assembly observation at a
+requested granularity — the whole action, the left hand, or the right hand — and
+emits a composition of five slots rather than a single closed-set label.
+
+![RIVET system architecture](assets/fig_overview.png)
+
+A prediction is correct only when all five slots match exactly:
 
 ```
 status, verb, manipulated_object, target_object, tool
 ```
 
-A prediction is correct only when all five match exactly. The same code serves
-HA-ViD (an acting hand is annotated) and Assembly101 and IKEA ASM (it is not).
+The same code serves HA-ViD (an acting hand is annotated) and Assembly101 and
+IKEA ASM (it is not). The backbone is
+[Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) with
+LoRA.
 
-The backbone is [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct)
-with LoRA. Stage 1 trains the LoRA on the video and a symbolic evidence packet.
-Stage 2 adds a decoder-side evidence injector (`SpatialEvidenceAdapter`) on a
-Stage-1 checkpoint.
+## Method
+
+RIVET comprises four components.
+
+- **(C1) Temporal evidence rendering.** The clip is rendered into a compact
+  evidence packet whose keyframes carry temporal badges and whose
+  self-verification questions are answerable only from the packet itself.
+  Reliability mixing presents the packet at a controlled reliability and trains
+  a binary arbitration target, so corrupted evidence degrades gracefully.
+- **(C2) Token-reconditioned decoding.** The packet enters the model through the
+  prompt, where it is read once, and through a decoder-side adapter
+  (`SpatialEvidenceAdapter`) that re-reads the keyframes at each generated token,
+  conditioning the read-out on the token. The adapter is injected at decoder
+  layer 0 and its injection scale is gated by a learned utility gate.
+- **(C3) Joint autoregressive compositional decoding.** The description is
+  generated as a single autoregressive sequence of five slots — status, action
+  verb, manipulated object, target object, and tool — each conditioned on the
+  preceding ones.
+- **(C4) Granularity-agnostic unification.** The observation granularity is
+  expressed in the query to the VLM rather than as an index over separately
+  trained models.
+
+Stage 1 trains the LoRA on the video and the evidence packet. Stage 2 adds the
+decoder-side adapter on a Stage-1 checkpoint.
 
 ## Layout
 
@@ -23,6 +50,7 @@ data/        clips, workspace crops, manifests, evidence packets
 model/       adapter, training, inference, metrics
 configs/     one config per corpus; method.yaml is the shared experiment matrix
 scripts/     end-to-end drivers
+assets/      figures
 tests/       offline tests (no GPU, no VLM)
 ```
 
@@ -36,8 +64,8 @@ The reported method does not call it.
 
 `configs/method.yaml` fixes the recipe used on every corpus:
 
-- no set-of-marks; temporal badges, necessity questions, reliability mixing,
-  a degraded-video arm and an arbitration gate are on
+- temporal badges, necessity questions, reliability mixing, a degraded-video arm
+  and an arbitration gate are on
 - Stage 2 injects evidence features at decoder layer 0
 - seed 17; the primary metric is 5-slot exact match under `hard_id` decoding
 
@@ -51,6 +79,20 @@ IKEA ASM annotates no tools and Assembly101 annotates no idle state, so one
 slot is constant on each. `model.run_informative` drops that slot from the
 auxiliary loss only. The output schema, the prompt and the exact-match metric
 stay the same as on HA-ViD, where the two launchers compute the same loss.
+
+## Results
+
+Exact-match accuracy (%), RGB input alone.
+
+| Corpus | Metric | RIVET (Stage 1+2) | Comparison |
+|---|---|---|---|
+| HA-ViD | left / right Top-1, 3-view avg | 71.6 / 70.1 | +9.0 / +7.3 over CoDuAR, the previously strongest dual-hand method |
+| IKEA ASM | mAcc / Top-1 | 59.2 / 82.4 | best mAcc, ahead of every method including ground-truth skeleton+mask oracles |
+| Assembly101 | action Top-1 | 41.1 | ahead of every RGB-only and pose-only model; tied with the best RGB+pose model |
+
+Assembly101 element accuracies: verb 66.7, manipulated object 54.4,
+target object 88.9, tool 97.2. The full method trains 67.1M parameters
+(LoRA + adapter) against CoDuAR's 134M.
 
 ## Pipeline
 

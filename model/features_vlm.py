@@ -1,40 +1,7 @@
-"""Evidence feature extraction that actually reaches the Qwen3-VL vision tower.
+"""Evidence feature extraction through the Qwen3-VL vision tower.
 
-Standalone replacement for model.features.extract_all. The original module
-is left untouched: this writes to its own output dir (default
-`features_vlm`), so existing artifacts and results are never overwritten.
-
-WHY THIS EXISTS
----------------
-model.features._pixels_from_image() returns only `pixel_values` and
-deliberately skips `image_grid_thw`:
-
-    for key in ("pixel_values", "pixel_values_images", "image_grid_thw"):
-        ...
-        if key == "image_grid_thw":
-            continue
-
-But Qwen3-VL's tower requires it -- `Qwen3VLVisionModel.forward(hidden_states,
-grid_thw, ...)` has no default for grid_thw. Verified end-to-end against the
-real 8B checkpoint on a real evidence keyframe:
-
-    get_image_features(pixel_values=px)                 -> AttributeError:
-        'NoneType' object has no attribute 'tolist'
-    get_image_features(pixel_values=px, image_grid_thw=g) -> tokens (728, 1152)
-
-The exception was swallowed by a bare `except Exception:` that falls back to
-`_histogram_tile()`, and extract_all counted the fallback as `done`, so
-features_audit.json reported `failed: 0, ok: true`. Every cached feature in
-`artifacts/havid_side_left/features/` is therefore a 96-d colour histogram tiled across
-the 4x4 grid (all 16 cells identical) rather than 1152-d vision features.
-
-FIXES
------
-1. Carry `image_grid_thw` through and pass it to the tower.
-2. Pool over the TRUE (h, w) from grid_thw instead of assuming a square patch
-   layout -- the real grid is e.g. 26x28, which ceil(sqrt(728))=27 scrambles.
-3. Fallbacks are counted, reported per-clip, and gate the audit's `ok` flag
-   instead of passing silently.
+Writes to its own output dir (default `features_vlm`), so existing artifacts
+are never overwritten.
 
     python -m model.features_vlm --config configs/base.yaml \
         --splits official_train_orig,official_test --device cuda

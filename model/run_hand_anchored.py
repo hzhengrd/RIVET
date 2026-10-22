@@ -3,7 +3,7 @@
 Two rebinds inside the shipped trainer's / inferencer's module namespace, no edit
 to either file:
 
-  EvidenceActionAdapter -> HandAnchoredAdapter   (the adapter itself)
+  AdapterClass -> HandAnchoredAdapter   (the adapter itself)
   make_messages         -> wrapper               (delivers the per-clip hand box)
 
 The second one is needed because the adapter's only per-sample input channel is
@@ -60,7 +60,7 @@ def _boxes_for(cfg: dict[str, Any], clip_id: str) -> list | None:
 
 
 def _patch(module) -> None:
-    module.EvidenceActionAdapter = _RegisteredHandAdapter
+    module.AdapterClass = _RegisteredHandAdapter
     original = module.make_messages
 
     def wrapped(cfg, row, spec, *args, **kwargs):

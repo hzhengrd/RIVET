@@ -1,20 +1,15 @@
 """Evidence builder.
 
 Produces, per clip:
-- a DENSE, TIME-BADGED keyframe strip (the proven workhorse, strengthened):
-  N motion-stratified natural frames, each carrying an ordinal badge and a
-  temporal progress bar. Badges are metadata about *when*, never assertions
-  about *what* — no extracted physics is drawn as content.
-- POINTER-ONLY Set-of-Mark image: numbered candidate regions on the peak-
-  interaction frame. Marks are hypotheses ("consider these regions"), not
-  assertions; a wrong mark is an unused option. FastSAM when available,
-  classical contour proposals otherwise.
+- a DENSE, TIME-BADGED keyframe strip: N motion-stratified natural frames,
+  each carrying an ordinal badge and a temporal progress bar. Badges are
+  metadata about *when*, never assertions about *what* — no extracted physics
+  is drawn as content.
 - necessity metadata with verifiable answers for evidence-reading QA:
-  pixel-arithmetic change localization (assumption-free) and a validity-gated
-  nearest-mark-to-hand answer (only when hand track coverage passes the gate).
+  pixel-arithmetic change localization and the latest keyframe.
 
-Hand tracking is used ONLY for frame selection and gated QA metadata — it is
-never rendered. Contact/trajectory assertions are deliberately absent.
+Hand tracking is used ONLY for frame selection — it is never rendered.
+Contact/trajectory assertions are deliberately absent.
 """
 from __future__ import annotations
 
@@ -27,7 +22,6 @@ import numpy as np
 
 from .evidence_config import artifact_path, load_config, repo_path
 from .evidence_utils import read_jsonl, write_json
-
 
 # ---------------------------------------------------------------- video io ---
 
@@ -46,7 +40,6 @@ def read_video(path: Path, max_frames: int) -> tuple[list[np.ndarray], np.ndarra
     cap.release()
     return frames, indices[:len(frames)], fps, total
 
-
 def motion_energy(frames: list[np.ndarray]) -> np.ndarray:
     import cv2
     if not frames:
@@ -60,7 +53,6 @@ def motion_energy(frames: list[np.ndarray]) -> np.ndarray:
         scores = np.convolve(scores, np.ones(3, dtype=np.float32) / 3, mode="same")
     return scores
 
-
 def stratified_keyframes(scores: np.ndarray, count: int) -> list[int]:
     """One max-motion frame per temporal stratum -> temporal coverage guaranteed.
     Kept as an ablation baseline; the default is energy_keyframes."""
@@ -73,7 +65,6 @@ def stratified_keyframes(scores: np.ndarray, count: int) -> list[int]:
         hi = max(lo + 1, int(round((phase + 1) * len(scores) / count)))
         selected.append(lo + int(np.argmax(scores[lo:hi])))
     return sorted(set(selected))
-
 
 def energy_keyframes(scores: np.ndarray, count: int, floor: float = 0.15,
                      snap_window: int = 2) -> list[int]:
@@ -118,7 +109,6 @@ def energy_keyframes(scores: np.ndarray, count: int, floor: float = 0.15,
         selected = sorted(selected)
     return [int(i) for i in selected]
 
-
 def maxmotion_keyframes(scores: np.ndarray, count: int) -> list[int]:
     """Global top-K motion frames, then sorted in time (no coverage guarantee)."""
     n = len(scores)
@@ -127,7 +117,6 @@ def maxmotion_keyframes(scores: np.ndarray, count: int) -> list[int]:
     count = min(count, n)
     chosen = np.argsort(-scores.astype(np.float64))[:count]
     return sorted(int(i) for i in chosen)
-
 
 def ends_uniform_keyframes(scores: np.ndarray, count: int) -> list[int]:
     """First + last frame, remaining budget uniform in time."""
@@ -138,7 +127,6 @@ def ends_uniform_keyframes(scores: np.ndarray, count: int) -> list[int]:
     picks = np.linspace(0, n - 1, count).round().astype(int).tolist()
     picks[0], picks[-1] = 0, n - 1
     return sorted(set(picks))
-
 
 def select_keyframes(scores: np.ndarray, count: int, method: str = "energy") -> list[int]:
     if method == "energy":
@@ -153,7 +141,6 @@ def select_keyframes(scores: np.ndarray, count: int, method: str = "energy") -> 
     if method in {"ends_uniform", "ends"}:
         return ends_uniform_keyframes(scores, count)
     raise ValueError(f"Unknown keyframe_method: {method}")
-
 
 # -------------------------------------------------------------- hand track ---
 
@@ -193,7 +180,6 @@ def _detect_hands_tasks_api(frames: list[np.ndarray], cfg: dict[str, Any]) -> li
     landmarker.close()
     return per_frame
 
-
 def _detect_hands_legacy_api(frames: list[np.ndarray], cfg: dict[str, Any]) -> list[list[tuple[list[float], str]]] | None:
     try:
         import mediapipe as mp
@@ -218,47 +204,6 @@ def _detect_hands_legacy_api(frames: list[np.ndarray], cfg: dict[str, Any]) -> l
     detector.close()
     return per_frame
 
-
-def detect_person_upper(frame: np.ndarray, cfg: dict[str, Any]) -> dict[str, Any] | None:
-    """Person segmentation mask (+ face keypoints) from the pose landmarker.
-
-    Used only to DOWNWEIGHT SoM proposals sitting on the operator's body —
-    never rendered. Returns None when the model is unavailable or no person
-    is detected."""
-    model_path = repo_path(cfg, cfg["evidence"].get("pose_landmarker_model", "models/pose_landmarker_lite.task"))
-    if not model_path.exists():
-        return None
-    try:
-        import mediapipe as mp
-        from mediapipe.tasks.python import BaseOptions, vision
-        landmarker = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=str(model_path)),
-            running_mode=vision.RunningMode.IMAGE, num_poses=1,
-        ))
-    except Exception:
-        return None
-    try:
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame))
-        result = landmarker.detect(image)
-    finally:
-        landmarker.close()
-    if not result.pose_landmarks:
-        return None
-    landmarks = result.pose_landmarks[0]
-    height, width = frame.shape[:2]
-    def _pt(i: int) -> np.ndarray:
-        return np.asarray([landmarks[i].x * width, landmarks[i].y * height], dtype=np.float32)
-    # indices: 0 nose, 7/8 ears, 11/12 shoulders, 23/24 hips
-    shoulder_width = float(np.linalg.norm(_pt(11) - _pt(12)))
-    # torso quad expanded ~20% laterally; hips may be off-frame, clamp handled by polygon test
-    torso = np.asarray([_pt(11), _pt(12), _pt(24), _pt(23)], dtype=np.float32)
-    torso_center = torso.mean(axis=0)
-    torso = torso_center + 1.2 * (torso - torso_center)
-    return {"face_points": [_pt(0), _pt(7), _pt(8)],
-            "face_radius": max(float(np.linalg.norm(_pt(7) - _pt(8))), 0.15 * shoulder_width),
-            "torso_polygon": torso}
-
-
 def hands_per_frame(frames: list[np.ndarray], cfg: dict[str, Any]) -> tuple[list[list[list[float]]], str]:
     """ALL detected hand boxes per frame (hand-agnostic mode).
 
@@ -273,7 +218,6 @@ def hands_per_frame(frames: list[np.ndarray], cfg: dict[str, Any]) -> tuple[list
     if per_frame is None:
         return [[] for _ in frames], "unavailable"
     return [[box for box, _label in detections] for detections in per_frame], tracker
-
 
 def hand_track(frames: list[np.ndarray], cfg: dict[str, Any], target_hand: str) -> tuple[list[list[float] | None], str]:
     if target_hand not in {"left", "right"}:
@@ -311,143 +255,10 @@ def hand_track(frames: list[np.ndarray], cfg: dict[str, Any], target_hand: str) 
             previous_center = chosen[1]
     return track, tracker
 
-
 def track_coverage(track: list[list[float] | None]) -> float:
     return float(np.mean([box is not None for box in track])) if track else 0.0
 
-
 # ---------------------------------------------------------------- proposers ---
-
-def classical_proposals(frame: np.ndarray, max_regions: int, min_area_frac: float,
-                        max_area_frac: float = 0.25) -> list[tuple[int, int, int, int]]:
-    """Annotation-free contour proposals (fallback when FastSAM is unavailable)."""
-    import cv2
-    height, width = frame.shape[:2]
-    gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 40, 120)
-    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=2)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    boxes = []
-    for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        area = w * h
-        if area < min_area_frac * width * height or area > max_area_frac * width * height:
-            continue
-        boxes.append((x, y, x + w, y + h, area))
-    boxes.sort(key=lambda item: -item[4])
-    return [tuple(int(v) for v in box[:4]) for box in boxes[:max_regions]]
-
-
-def fastsam_proposals(frame: np.ndarray, model_path: Path, max_regions: int, min_area_frac: float,
-                      device: str, max_area_frac: float = 0.25) -> list[tuple[int, int, int, int]] | None:
-    """Candidate regions from FastSAM. Returns MORE than max_regions; the caller
-    ranks by manipulation relevance (motion + hand proximity) and trims."""
-    try:
-        from ultralytics import FastSAM
-    except ImportError:
-        return None
-    if not model_path.is_file():
-        return None
-    import cv2
-    height, width = frame.shape[:2]
-    result = FastSAM(str(model_path))(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR), device=device,
-                                      retina_masks=True, imgsz=640, conf=0.3, iou=0.9, verbose=False)
-    if not result or result[0].boxes is None:
-        return None
-    boxes = []
-    for box in result[0].boxes.xyxy.cpu().numpy():
-        area = float(box[2] - box[0]) * float(box[3] - box[1])
-        if area < min_area_frac * width * height or area > max_area_frac * width * height:
-            continue
-        boxes.append(tuple(float(v) for v in box[:4]))
-    return [tuple(int(v) for v in box) for box in boxes[: max_regions * 6]]
-
-
-def _box_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
-    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
-    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
-    inter = ix * iy
-    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
-    return inter / union if union > 0 else 0.0
-
-
-def rank_proposals(boxes: list[tuple[int, int, int, int]], motion_map: np.ndarray,
-                   hand_centers_px: list[np.ndarray], max_regions: int,
-                   hand_scale_px: float | None = None, min_regions: int = 3,
-                   score_keep_frac: float = 0.45,
-                   person: dict[str, Any] | None = None) -> list[tuple[int, int, int, int]]:
-    """Rank candidate regions by manipulation relevance, not size.
-
-    The person also moves, so raw motion energy alone favors head/torso
-    segments. When the hand track is reliable, proximity to the manipulation
-    zone (any tracked hand position, decay scaled by hand size) dominates;
-    motion is log-damped and only breaks ties among nearby regions. Without a
-    reliable track, motion is the only signal. Greedy IoU dedup, then an
-    adaptive cutoff drops far/static leftovers instead of padding to
-    max_regions with person/background segments.
-    """
-    if not boxes:
-        return []
-    height, width = motion_map.shape[:2]
-    decay = hand_scale_px if hand_scale_px else 0.1 * float(np.hypot(width, height))
-    scored = []
-    for box in boxes:
-        x1, y1, x2, y2 = (max(0, box[0]), max(0, box[1]), min(width, box[2]), min(height, box[3]))
-        if x2 <= x1 or y2 <= y1:
-            continue
-        motion = float(motion_map[y1:y2, x1:x2].mean())
-        weight = 1.0
-        if hand_centers_px:
-            center = np.asarray([(x1 + x2) / 2, (y1 + y2) / 2], dtype=np.float32)
-            distance = min(float(np.linalg.norm(center - hand)) for hand in hand_centers_px)
-            weight = float(np.exp(-distance / max(decay, 1.0)))
-        if hand_scale_px:
-            # Graspable-scale prior: assembly components are roughly hand-sized;
-            # torso/monitor/background segments are several times larger.
-            box_diag = float(np.hypot(x2 - x1, y2 - y1))
-            oversize = box_diag / max(hand_scale_px, 1.0)  # hand_scale_px ~ 2 hand diagonals
-            if oversize > 1.0:
-                weight *= float(np.exp(-(oversize - 1.0)))
-        if person is not None:
-            import cv2
-            center = np.asarray([(x1 + x2) / 2, (y1 + y2) / 2], dtype=np.float32)
-            face_distance = min(float(np.linalg.norm(center - p)) for p in person["face_points"])
-            on_torso = cv2.pointPolygonTest(person["torso_polygon"].reshape(-1, 1, 2),
-                                            (float(center[0]), float(center[1])), False) >= 0
-            if face_distance < 3.0 * person["face_radius"] or on_torso:
-                weight *= 0.05   # proposal sits on the operator's head/torso
-        scored.append((weight * (1.0 + float(np.log1p(motion))), box))
-    scored.sort(key=lambda item: -item[0])
-    kept: list[tuple[float, tuple[int, int, int, int]]] = []
-    for score, box in scored:
-        if all(_box_iou(box, existing) < 0.5 for _, existing in kept):
-            kept.append((score, box))
-        if len(kept) >= max_regions:
-            break
-    if kept:
-        threshold = score_keep_frac * kept[0][0]
-        kept = [item for i, item in enumerate(kept) if i < min_regions or item[0] >= threshold]
-    return [box for _, box in kept]
-
-
-def motion_map_from_frames(frames: list[np.ndarray]) -> np.ndarray:
-    """Per-pixel mean absolute temporal difference at full resolution (float32)."""
-    import cv2
-    gray = [cv2.cvtColor(f, cv2.COLOR_RGB2GRAY).astype(np.float32) for f in frames]
-    if len(gray) < 2:
-        return np.zeros_like(gray[0])
-    acc = np.zeros_like(gray[0])
-    for a, b in zip(gray, gray[1:]):
-        acc += np.abs(b - a)
-    acc /= len(gray) - 1
-    return cv2.GaussianBlur(acc, (9, 9), 0)
-
-
-# ---------------------------------------------------------------- rendering ---
-
-MARK_COLORS = [(255, 64, 64), (64, 200, 64), (64, 128, 255), (255, 200, 0),
-               (200, 64, 255), (0, 200, 200), (255, 128, 0), (0, 160, 255)]
-
 
 def _font(size: int):
     from PIL import ImageFont
@@ -478,35 +289,10 @@ def badge_keyframe(frame: np.ndarray, ordinal: int, count: int, relative_time: f
     draw.rectangle([0, h - bar_height, int(relative_time * (w - 1)), h - 1], fill=(255, 200, 0))
     return np.asarray(image)
 
-
-def draw_pointer_marks(frame: np.ndarray, boxes: list[tuple[int, int, int, int]], size: int) -> tuple[np.ndarray, list[dict[str, Any]]]:
-    import cv2
-    from PIL import Image, ImageDraw
-    height, width = frame.shape[:2]
-    scale = size / max(width, height)
-    resized = cv2.resize(frame, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
-    image = Image.fromarray(resized)
-    draw = ImageDraw.Draw(image)
-    font = _font(max(14, image.size[1] // 16))
-    marks = []
-    for index, box in enumerate(boxes):
-        color = MARK_COLORS[index % len(MARK_COLORS)]
-        x1, y1, x2, y2 = [int(v * scale) for v in box]
-        draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-        radius = max(10, image.size[1] // 24)
-        draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=color)
-        draw.text((cx - radius // 2 - 2, cy - radius // 2 - 4), str(index + 1), fill=(0, 0, 0), font=font)
-        marks.append({"id": index + 1, "box": [int(v) for v in box],
-                      "center": [float((box[0] + box[2]) / 2), float((box[1] + box[3]) / 2)]})
-    return np.asarray(image), marks
-
-
 def save_rgb(path: Path, frame: np.ndarray) -> None:
     import cv2
     path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(path), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-
 
 def degrade_video(source: Path, destination: Path, cfg: dict[str, Any]) -> None:
     """Low-information counterfactual video for necessity training."""
@@ -536,7 +322,6 @@ def degrade_video(source: Path, destination: Path, cfg: dict[str, Any]) -> None:
     if writer is not None:
         writer.release()
 
-
 # ------------------------------------------------------------------ builder ---
 
 def keyframe_change_pair(frames: list[np.ndarray], keyframe_indices: list[int]) -> int:
@@ -549,7 +334,6 @@ def keyframe_change_pair(frames: list[np.ndarray], keyframe_indices: list[int]) 
     gray = [cv2.resize(cv2.cvtColor(frames[i], cv2.COLOR_RGB2GRAY), (160, 90)) for i in keyframe_indices]
     diffs = [float(np.mean(cv2.absdiff(a, b))) for a, b in zip(gray, gray[1:])]
     return int(np.argmax(diffs)) + 1
-
 
 def process_record(row: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
     clip_id = row["clip_id"]
@@ -602,68 +386,11 @@ def process_record(row: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
         plain = cv2.resize(frames[index], (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
         save_rgb(out / f"plain_kf{ordinal:02d}.jpg", plain)
 
-    som_backend = "none"
-    marks: list[dict[str, Any]] = []
-    if cfg["evidence"].get("include_som", True):
-        peak_frame = frames[peak]
-        max_marks = int(cfg["evidence"]["max_marks"])
-        max_area = float(cfg["evidence"].get("max_mark_area_frac", 0.25))
-        candidates = fastsam_proposals(peak_frame, repo_path(cfg, cfg["evidence"]["fastsam_path"]),
-                                       max_marks, float(cfg["evidence"]["min_mark_area_frac"]),
-                                       cfg["evidence"].get("som_device", "cpu"), max_area)
-        if candidates is not None:
-            som_backend = "fastsam"
-        else:
-            candidates = classical_proposals(peak_frame, max_marks * 6,
-                                             float(cfg["evidence"]["min_mark_area_frac"]), max_area)
-            som_backend = "classical"
-        # Rank by manipulation relevance (motion around the peak + hand
-        # proximity) so marks land on moving assembly parts, not on the
-        # static person/background.
-        lo, hi = max(0, peak - 3), min(len(frames), peak + 4)
-        motion = motion_map_from_frames(frames[lo:hi])
-        hand_centers_px: list[np.ndarray] = []
-        hand_sizes: list[float] = []
-        if reliable:
-            height, width = peak_frame.shape[:2]
-            # hand-agnostic: every detected hand contributes, so proposals are
-            # ranked by proximity to EITHER hand rather than to one arbitrary track
-            window = ([b for boxes in multi_track[lo:hi] for b in boxes] if hand_agnostic
-                      else raw_track[lo:hi])
-            for hand_box in window:
-                if hand_box is not None:
-                    hand_centers_px.append(np.asarray([(hand_box[0] + hand_box[2]) / 2 * width,
-                                                       (hand_box[1] + hand_box[3]) / 2 * height], dtype=np.float32))
-                    hand_sizes.append(float(np.hypot((hand_box[2] - hand_box[0]) * width,
-                                                     (hand_box[3] - hand_box[1]) * height)))
-        # decay ~ 1.5 hand-diagonals: marks concentrate on the graspable zone;
-        # occlusion-flicker regions behind the operator sit several diagonals away
-        hand_scale = 1.5 * float(np.median(hand_sizes)) if hand_sizes else None
-        person = detect_person_upper(peak_frame, cfg)
-        boxes = rank_proposals(candidates or [], motion, hand_centers_px, max_marks, hand_scale,
-                               person=person)
-        if boxes:
-            som_image, marks = draw_pointer_marks(peak_frame, boxes, int(cfg["evidence"]["som_size"]))
-            save_rgb(out / "som.jpg", som_image)
-            assets.append({"type": "som", "path": "som.jpg", "sample_index": int(peak),
-                           "source_frame": int(sampled_indices[peak])})
-
     # Necessity QA metadata (all answers verifiable; hand answer validity-gated).
     necessity: dict[str, Any] = {
         "keyframe_count": len(keyframes),
         "max_change_after_kf": keyframe_change_pair(frames, keyframes),
     }
-    # "which mark is nearest the <target> hand" has no answer when no hand is the
-    # subject, so hand-agnostic clips simply do not get this QA item (the prompt
-    # builders key off its presence).
-    if not hand_agnostic and reliable and marks and raw_track[peak] is not None:
-        height, width = frames[peak].shape[:2]
-        hand_box = raw_track[peak]
-        hand_center = np.asarray([(hand_box[0] + hand_box[2]) / 2 * width,
-                                  (hand_box[1] + hand_box[3]) / 2 * height])
-        distances = [float(np.linalg.norm(hand_center - np.asarray(mark["center"]))) for mark in marks]
-        necessity["mark_nearest_hand"] = int(marks[int(np.argmin(distances))]["id"])
-
     if cfg["evidence"].get("include_degraded_video", True):
         degraded = out / "degraded.mp4"
         if not degraded.exists():
@@ -672,17 +399,15 @@ def process_record(row: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
     meta = {
         "clip_id": clip_id, "source": str(source), "tracker": tracker,
         "track_coverage": coverage, "reliable_localization": reliable,
-        "som_backend": som_backend, "marks": marks,
         "keyframe_method": cfg["evidence"].get("keyframe_method", "energy"),
         "keyframe_indices": [int(sampled_indices[i]) for i in keyframes],
         "peak_source_frame": int(sampled_indices[peak]),
         "assets": assets, "necessity": necessity,
-        "policy": ("pointer-only evidence: badges/bars encode time, marks are candidate "
-                   "regions; no extracted trajectory or contact is rendered"),
+        "policy": ("pointer-only evidence: badges/bars encode time; no extracted "
+                   "trajectory or contact is rendered"),
     }
     write_json(out / "meta.json", meta)
     return meta
-
 
 def records(cfg: dict[str, Any], splits: list[str] | None = None) -> list[dict[str, Any]]:
     root = artifact_path(cfg, "manifests")
@@ -693,14 +418,11 @@ def records(cfg: dict[str, Any], splits: list[str] | None = None) -> list[dict[s
     rows = [row for split in splits for row in read_jsonl(root / f"{split}.jsonl")]
     return list({row["clip_id"]: row for row in rows}.values())
 
-
 def audit(cfg: dict[str, Any]) -> dict[str, Any]:
     rows = records(cfg)
     found = []
     failures = []
     reliable = 0
-    mark_counts = []
-    backends: dict[str, int] = {}
     for row in rows:
         path = artifact_path(cfg, cfg["evidence"].get("output_dirname", "evidence"), row["clip_id"], "meta.json")
         if not path.exists():
@@ -709,17 +431,12 @@ def audit(cfg: dict[str, Any]) -> dict[str, Any]:
         meta = json.loads(path.read_text())
         found.append(meta)
         reliable += int(meta["reliable_localization"])
-        mark_counts.append(len(meta["marks"]))
-        backends[meta["som_backend"]] = backends.get(meta["som_backend"], 0) + 1
     report = {"expected": len(rows), "complete": len(found), "missing": failures[:20],
               "missing_count": len(failures),
               "reliable": reliable, "reliable_rate": reliable / max(1, len(found)),
-              "mean_marks": float(np.mean(mark_counts)) if mark_counts else 0.0,
-              "som_backends": backends,
               "ok": len(found) == len(rows)}
     write_json(artifact_path(cfg, cfg["evidence"].get("output_dirname", "evidence"), "audit.json"), report)
     return report
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -760,7 +477,6 @@ def main() -> None:
     write_json(artifact_path(cfg, cfg["evidence"].get("output_dirname", "evidence"), "build_errors.json"), errors)
     if errors:
         raise RuntimeError(f"Evidence build failed for {len(errors)} clips; see build_errors.json")
-
 
 if __name__ == "__main__":
     main()
