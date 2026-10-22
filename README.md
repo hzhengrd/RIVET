@@ -13,8 +13,7 @@ A prediction is correct only when all five slots match exactly:
 status, verb, manipulated_object, target_object, tool
 ```
 
-The same code serves HA-ViD (an acting hand is annotated) and Assembly101 and
-IKEA ASM (it is not). The backbone is
+The backbone is
 [Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) with
 LoRA.
 
