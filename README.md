@@ -96,6 +96,9 @@ target object 88.9, tool 97.2. The full method trains 67.1M parameters
 
 ## Pipeline
 
+Dataset download links and the exact subsets are listed in
+[`data/README.md`](data/README.md).
+
 ```bash
 # 1. Clips, crops, manifests.
 python -m data.havid --view v1 --workers 24
