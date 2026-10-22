@@ -154,7 +154,7 @@ at during inference.
 
 ## Requirements
 
-See `requirements.txt`. Evidence construction runs on CPU (OpenCV, MediaPipe).
+See `requirements.txt`. Evidence construction runs on CPU.
 Feature extraction and training need a CUDA GPU and the Qwen3-VL weights.
 
 ```bash
