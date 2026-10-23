@@ -44,8 +44,9 @@ NECESSITY_PROMPTS = {
     "change": ("Look at the badge numbers on the keyframes. Between which keyframe and the next one "
                "does the largest visible change in the workspace occur? Answer with the badge number "
                "of the earlier keyframe only."),
-    "latest": ("Look at the badge numbers and progress bars on the keyframes. Which badge number "
-               "corresponds to the latest moment in the clip? Answer with the number only."),
+    "smallest": ("Look at the badge numbers on the keyframes. Between which keyframe and the next one "
+                 "does the smallest visible change in the workspace occur? Answer with the badge number "
+                 "of the earlier keyframe only."),
 }
 
 ARBITRATION_PROMPT = (
@@ -193,7 +194,7 @@ def necessity_items(cfg: dict[str, Any], row: dict[str, Any], spec: dict[str, An
         items.append({"row": row, "task": "change", "answer": str(necessity.get("max_change_after_kf", 1)),
                       "degraded": False, "corruption": None})
     if rng.random() < fraction:
-        items.append({"row": row, "task": "latest", "answer": str(necessity.get("keyframe_count", 1)),
+        items.append({"row": row, "task": "smallest", "answer": str(necessity.get("min_change_after_kf", 1)),
                       "degraded": False, "corruption": None})
     return items
 

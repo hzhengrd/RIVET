@@ -3,8 +3,8 @@
 Matches the paper's five modes (Section 3.2.3): an intact packet (correct), a
 shuffled keyframe order (shuffled), a partially removed packet (partial),
 substitution by another clip's packet (wrong), and complete removal (absent).
-Each mode carries a binary arbitration target: only an intact packet still
-depicts the queried clip with usable structure.
+Each mode carries a graded gate target: intact evidence opens the gate, a
+degraded but same-clip packet half-opens it, and a wrong or absent packet closes it.
 """
 from __future__ import annotations
 
@@ -18,19 +18,20 @@ CorruptionMode = Literal["correct", "shuffled", "partial", "wrong", "absent"]
 
 DEFAULT_SCHEDULE: dict[str, float] = {
     "correct": 0.50,
-    "shuffled": 0.11,
-    "partial": 0.17,
-    "wrong": 0.11,
-    "absent": 0.11,
+    "shuffled": 0.15,
+    "partial": 0.15,
+    "wrong": 0.10,
+    "absent": 0.10,
 }
 
 RELIABILITY_MODES: list[str] = ["correct", "shuffled", "partial", "wrong", "absent"]
 
-# Binary arbitration target of Eq. (arbitration): a(m) = 1 only for an intact packet.
+# Graded gate target of Eq. (arbitration): a(m) = 1 (correct), 1/2 (shuffled,
+# partial), 0 (wrong, absent).
 GATE_TARGET: dict[str, float] = {
     "correct": 1.0,
-    "shuffled": 0.0,
-    "partial": 0.0,
+    "shuffled": 0.5,
+    "partial": 0.5,
     "wrong": 0.0,
     "absent": 0.0,
 }
@@ -81,7 +82,7 @@ def arbitration_label(draw: CorruptionDraw) -> str:
 
 
 def gate_target(mode: str | None) -> float:
-    """Reliability gate binary target: 1 open, 0 closed."""
+    """Reliability gate graded target: 1 open, 0.5 degraded, 0 closed."""
     return GATE_TARGET.get(mode, 0.0)
 
 

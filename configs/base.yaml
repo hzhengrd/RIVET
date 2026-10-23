@@ -38,10 +38,10 @@ reliability:
   enabled: true
   schedule:
     correct: 0.50
-    shuffled: 0.11
-    partial: 0.17
-    wrong: 0.11
-    absent: 0.11
+    shuffled: 0.15
+    partial: 0.15
+    wrong: 0.10
+    absent: 0.10
   arbitration_fraction: 0.30
   grpo_corrupt_fraction: 0.35
   do_no_harm_weight: 1.5

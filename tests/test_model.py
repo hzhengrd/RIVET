@@ -39,8 +39,8 @@ def test_parse_and_exact_scoring():
 
 def test_gate_targets():
     assert gate_target("correct") == 1.0
-    assert gate_target("shuffled") == 0.0
-    assert gate_target("partial") == 0.0
+    assert gate_target("shuffled") == 0.5
+    assert gate_target("partial") == 0.5
     assert gate_target("wrong") == 0.0
     assert gate_target("absent") == 0.0
 

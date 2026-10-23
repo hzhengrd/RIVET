@@ -6,7 +6,8 @@ Produces, per clip:
   metadata about *when*, never assertions about *what* — no extracted physics
   is drawn as content.
 - necessity metadata with verifiable answers for evidence-reading QA:
-  pixel-arithmetic change localization and the latest keyframe.
+  pixel-arithmetic localization of the largest and smallest changes between
+  consecutive keyframes.
 
 Hand tracking is used ONLY for frame selection — it is never rendered.
 Contact/trajectory assertions are deliberately absent.
@@ -324,16 +325,18 @@ def degrade_video(source: Path, destination: Path, cfg: dict[str, Any]) -> None:
 
 # ------------------------------------------------------------------ builder ---
 
-def keyframe_change_pair(frames: list[np.ndarray], keyframe_indices: list[int]) -> int:
+def keyframe_change_pair(frames: list[np.ndarray], keyframe_indices: list[int], mode: str = "max") -> int:
     """Pixel-arithmetic answer: between which consecutive keyframes is the change
-    largest? Returns the 1-based ordinal of the earlier keyframe of the pair.
+    largest (mode="max") or smallest (mode="min")? Returns the 1-based ordinal of
+    the earlier keyframe of the pair.
     Assumption-free (pure frame differencing), so safe as a necessity QA target."""
     import cv2
     if len(keyframe_indices) < 2:
         return 1
     gray = [cv2.resize(cv2.cvtColor(frames[i], cv2.COLOR_RGB2GRAY), (160, 90)) for i in keyframe_indices]
     diffs = [float(np.mean(cv2.absdiff(a, b))) for a, b in zip(gray, gray[1:])]
-    return int(np.argmax(diffs)) + 1
+    idx = int(np.argmax(diffs)) if mode == "max" else int(np.argmin(diffs))
+    return idx + 1
 
 def process_record(row: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
     clip_id = row["clip_id"]
@@ -388,8 +391,8 @@ def process_record(row: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
 
     # Necessity QA metadata (all answers verifiable; hand answer validity-gated).
     necessity: dict[str, Any] = {
-        "keyframe_count": len(keyframes),
         "max_change_after_kf": keyframe_change_pair(frames, keyframes),
+        "min_change_after_kf": keyframe_change_pair(frames, keyframes, mode="min"),
     }
     if cfg["evidence"].get("include_degraded_video", True):
         degraded = out / "degraded.mp4"
